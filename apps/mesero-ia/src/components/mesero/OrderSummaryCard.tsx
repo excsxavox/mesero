@@ -6,6 +6,7 @@ import {
   orderTotal,
   lineSubtotal,
   type ConfirmedBundle,
+  type DraftLineInput,
 } from "../../lib/orderDisplayLines";
 import { orderStatusBadgeClass, orderStatusLabel } from "../../lib/orderStatusLabels";
 import { MenuItemImage } from "./MenuItemImage";
@@ -13,8 +14,10 @@ import { MenuItemImage } from "./MenuItemImage";
 type Props = {
   menu: MenuItem[];
   corpus: string;
+  pendingDraft?: DraftLineInput[];
   touchCart?: Record<string, number>;
   confirmed: ConfirmedBundle[];
+  busy?: boolean;
   onClearConfirmed?: () => void;
   onClearOrder?: () => void;
   onTouchDelta?: (menuItemId: string, delta: number) => void;
@@ -38,17 +41,53 @@ function BagIcon() {
   );
 }
 
+function OrderLinesList({
+  lines,
+  menuById,
+}: {
+  lines: ReturnType<typeof mergedActiveLines>;
+  menuById: Map<string, MenuItem>;
+}) {
+  return (
+    <ul className="space-y-2.5">
+      {lines.map((it) => {
+        const sub = lineSubtotal(it);
+        const m = menuById.get(it.menuItemId);
+        return (
+          <li key={it.menuItemId} className="flex items-center gap-2.5">
+            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-mesero-muted ring-1 ring-mesero-line/15">
+              <MenuItemImage src={m?.imageUrl} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
+              <p className="text-xs font-semibold text-amber-400">×{it.qty}</p>
+            </div>
+            {sub != null ? (
+              <span className="shrink-0 text-sm tabular-nums text-blue-200/85">{formatMoney(sub)}</span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function OrderSummaryCard({
   menu,
   corpus,
+  pendingDraft,
   touchCart,
   confirmed,
+  busy,
   onClearConfirmed,
   onClearOrder,
   onTouchDelta,
 }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const lines = useMemo(() => mergedActiveLines(menu, corpus, touchCart), [menu, corpus, touchCart]);
+  const lines = useMemo(
+    () => mergedActiveLines(menu, corpus, touchCart, pendingDraft),
+    [menu, corpus, touchCart, pendingDraft],
+  );
   const total = orderTotal(lines);
   const menuById = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
   const hasOrderDraft =
@@ -59,71 +98,67 @@ export function OrderSummaryCard({
     [confirmed],
   );
 
+  const showDraftSection = lines.length > 0 || busy;
+
   return (
     <section className="flex flex-col rounded-2xl border border-mesero-line/15 bg-mesero-panel/90 p-4 ring-1 ring-mesero-line/10">
       <div className="flex items-center gap-2">
         <BagIcon />
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-mesero-text-muted">
-          {queue.length > 1 ? "Cola de pedidos" : "Pedido en curso"}
-        </h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-mesero-text-muted">Pedido en curso</h2>
       </div>
 
-      {queue.length > 0 ? (
-        <ul className="mt-2 space-y-2" aria-label="Pedidos enviados a cocina">
-          {queue.map((b, index) => (
-            <li
-              key={b.id}
-              className="rounded-lg border border-mesero-line/15 bg-mesero-deep/30 px-2.5 py-2 ring-1 ring-mesero-line/10"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-mesero-accent/80">
-                    {queue.length > 1 ? `Pedido ${index + 1} en cola` : "En cocina"} · #{b.id.slice(-6)}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-mesero-text/90">
-                    {b.items.map((it) => `${it.qty}× ${it.name}`).join(", ")}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ${orderStatusBadgeClass(b.status)}`}
-                >
-                  {orderStatusLabel(b.status)}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {lines.length === 0 ? (
-        <p className="mt-4 text-sm text-mesero-text-muted/80">Aún no hay artículos detectados.</p>
+      {showDraftSection ? (
+        <div className="mt-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-amber-400/90">
+            Por confirmar
+          </p>
+          {lines.length > 0 ? (
+            <OrderLinesList lines={lines} menuById={menuById} />
+          ) : busy ? (
+            <p className="text-sm text-mesero-text-muted/80">Escuchando tu pedido…</p>
+          ) : (
+            <p className="text-sm text-mesero-text-muted/80">Di el plato concreto para verlo aquí.</p>
+          )}
+          {total != null && lines.length > 0 ? (
+            <div className="mt-3 text-center">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-mesero-accent/65">Total estimado</p>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums text-amber-400">{formatMoney(total)}</p>
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <ul className="mt-3 space-y-2.5">
-          {lines.map((it) => {
-            const sub = lineSubtotal(it);
-            const m = menuById.get(it.menuItemId);
-            return (
-              <li key={it.menuItemId} className="flex items-center gap-2.5">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-mesero-muted ring-1 ring-mesero-line/15">
-                  <MenuItemImage src={m?.imageUrl} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
-                  <p className="text-xs font-semibold text-amber-400">×{it.qty}</p>
-                </div>
-                {sub != null ? (
-                  <span className="shrink-0 text-sm tabular-nums text-blue-200/85">{formatMoney(sub)}</span>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+        <p className="mt-4 text-sm text-mesero-text-muted/80">Aún no hay artículos en tu pedido.</p>
       )}
 
-      {total != null && lines.length > 0 ? (
-        <div className="mt-4 text-center">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-mesero-accent/65">Total estimado</p>
-          <p className="mt-0.5 text-3xl font-bold tabular-nums text-amber-400">{formatMoney(total)}</p>
+      {queue.length > 0 ? (
+        <div className={showDraftSection ? "mt-4 border-t border-mesero-line/15 pt-3" : "mt-2"}>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-mesero-accent/80">
+            {queue.length > 1 ? "En cocina (cola)" : "En cocina"}
+          </p>
+          <ul className="space-y-2" aria-label="Pedidos enviados a cocina">
+            {queue.map((b, index) => (
+              <li
+                key={b.id}
+                className="rounded-lg border border-mesero-line/15 bg-mesero-deep/30 px-2.5 py-2 ring-1 ring-mesero-line/10"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-mesero-accent/80">
+                      {queue.length > 1 ? `Pedido ${index + 1}` : "Confirmado"} · #{b.id.slice(-6)}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-mesero-text/90">
+                      {b.items.map((it) => `${it.qty}× ${it.name}`).join(", ")}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ${orderStatusBadgeClass(b.status)}`}
+                  >
+                    {orderStatusLabel(b.status)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -132,7 +167,7 @@ export function OrderSummaryCard({
         onClick={() => setDetailsOpen((v) => !v)}
         className="touch-manipulation mt-4 w-full min-h-11 rounded-xl border border-mesero-line/25 bg-mesero-panel/50 py-2.5 text-sm font-medium text-mesero-text hover:bg-mesero-panel/40"
       >
-          {detailsOpen ? "Ocultar detalles" : "Ver detalles del pedido"}
+        {detailsOpen ? "Ocultar detalles" : "Ver detalles del pedido"}
       </button>
       {onClearOrder && hasOrderDraft ? (
         <button
@@ -149,7 +184,7 @@ export function OrderSummaryCard({
           {confirmed.length > 0 ? (
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <span className="font-semibold text-emerald-400/90">Pedidos en cocina</span>
+                <span className="font-semibold text-emerald-400/90">Historial en cocina</span>
                 {onClearConfirmed ? (
                   <button type="button" onClick={onClearConfirmed} className="text-mesero-accent hover:text-blue-200">
                     Limpiar
@@ -183,4 +218,3 @@ export function OrderSummaryCard({
     </section>
   );
 }
-

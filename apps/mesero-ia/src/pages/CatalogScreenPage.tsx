@@ -127,9 +127,10 @@ export function CatalogScreenPage() {
     voiceError,
     touchCart,
     setTouchCart,
-    messages,
     assistantName,
     wakeWord,
+    orderDraftCorpus,
+    pendingDraft,
   } = useMesero();
   const { theme, toggleTheme } = useMeseroTheme();
   const { companyName: profileCompanyName } = useAuth();
@@ -139,11 +140,6 @@ export function CatalogScreenPage() {
     profileCompanyName || settings?.restaurantName?.trim() || "Mi restaurante";
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-
-  const orderDraftCorpus = useMemo(
-    () => messages.filter((m) => m.role === "user").map((m) => m.content).join(" "),
-    [messages],
-  );
 
   const blocks = useMemo(() => groupByCategory(menu), [menu]);
   const categories = useMemo(() => blocks.map((b) => b.category), [blocks]);
@@ -167,8 +163,8 @@ export function CatalogScreenPage() {
   }, [blocks, activeCat, q]);
 
   const orderLines = useMemo(
-    () => mergedActiveLines(menu, orderDraftCorpus, touchCart),
-    [menu, orderDraftCorpus, touchCart],
+    () => mergedActiveLines(menu, orderDraftCorpus, touchCart, pendingDraft),
+    [menu, orderDraftCorpus, touchCart, pendingDraft],
   );
   const total = orderTotal(orderLines);
   const orderItemCount = useMemo(() => orderLines.reduce((n, l) => n + l.qty, 0), [orderLines]);

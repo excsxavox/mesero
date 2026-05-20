@@ -40,6 +40,8 @@ export function ChatPage() {
     setTouchCart,
     confirmed,
     setConfirmed,
+    pendingDraft,
+    orderDraftCorpus,
     clearOrder,
     clearConversation,
     sendWithText,
@@ -100,17 +102,12 @@ export function ChatPage() {
     return () => registerOrderToast(null);
   }, [registerOrderToast]);
 
-  const orderDraftCorpus = useMemo(
-    () => messages.filter((m) => m.role === "user").map((m) => m.content).join(" "),
-    [messages],
-  );
-
   const menuCategories = useMemo(() => categoryPreviewsForStrip(menu, [], 12), [menu]);
   const quickMenuCategories = useMemo(() => menuCategories.slice(0, 4), [menuCategories]);
 
   const hasActiveOrder = useMemo(
-    () => mergedActiveLines(menu, orderDraftCorpus, touchCart).length > 0,
-    [menu, orderDraftCorpus, touchCart],
+    () => mergedActiveLines(menu, orderDraftCorpus, touchCart, pendingDraft).length > 0,
+    [menu, orderDraftCorpus, touchCart, pendingDraft],
   );
 
   const wakeMode = listening && !busy && !ttsActive;
@@ -448,8 +445,10 @@ export function ChatPage() {
               <OrderSummaryCard
                 menu={menu}
                 corpus={orderDraftCorpus}
+                pendingDraft={pendingDraft}
                 touchCart={touchCart}
                 confirmed={confirmed}
+                busy={busy}
                 onClearConfirmed={() => setConfirmed([])}
                 onClearOrder={
                   !needsMandatoryPasswordSetup && (hasActiveOrder || confirmed.length > 0)

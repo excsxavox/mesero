@@ -22,7 +22,7 @@ import {
   type MeseroMsg,
 } from "../lib/meseroSessionStorage";
 import { speechLocaleFromConversation } from "../lib/speechLocale";
-import type { ConfirmedBundle } from "../lib/orderDisplayLines";
+import type { ConfirmedBundle, DraftLineInput } from "../lib/orderDisplayLines";
 import type { Settings } from "../lib/types";
 import { applyKioskTableFromUrl } from "../lib/kioskTable";
 import { clampSelectedTable, formatTableLabel, normalizeTableCount } from "../lib/tables";
@@ -48,6 +48,10 @@ type MeseroContextValue = {
   setTouchCart: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   confirmed: ConfirmedBundle[];
   setConfirmed: React.Dispatch<React.SetStateAction<ConfirmedBundle[]>>;
+  /** Borrador devuelto por Karen (DRAFT_JSON) en el último turno. */
+  pendingDraft: DraftLineInput[];
+  /** Texto del cliente desde el último pedido confirmado (evita arrastrar platos viejos). */
+  orderDraftCorpus: string;
   clearOrder: () => void;
   clearConversation: () => void;
   sendWithText: (raw: string) => Promise<void>;
@@ -78,6 +82,8 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   const [messages, setMessages] = useState<MeseroMsg[]>(initial.messages ?? []);
   const [touchCart, setTouchCart] = useState<Record<string, number>>(initial.touchCart);
   const [confirmed, setConfirmed] = useState<ConfirmedBundle[]>([]);
+  const [pendingDraft, setPendingDraft] = useState<DraftLineInput[]>([]);
+  const [draftEpochMs, setDraftEpochMs] = useState(0);
   const [selectedTable, setSelectedTableState] = useState<number | null>(() =>
     clampSelectedTable(initial.selectedTable ?? null, normalizeTableCount(undefined)),
   );
@@ -111,10 +117,16 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
 
   const needsMandatoryPasswordSetup = Boolean(settings && !settings.adminExitPasswordConfigured);
 
-  const orderDraftCorpus = useMemo(
-    () => messages.filter((m) => m.role === "user").map((m) => m.content).join(" "),
-    [messages],
-  );
+  const orderDraftCorpus = useMemo(() => {
+    const users = messages.filter((m) => m.role === "user");
+    const scoped = draftEpochMs
+      ? users.filter((m) => {
+          if (!m.at) return true;
+          return new Date(m.at).getTime() > draftEpochMs;
+        })
+      : users;
+    return scoped.map((m) => m.content).join(" ");
+  }, [messages, draftEpochMs]);
 
   const tableCount = useMemo(
     () => normalizeTableCount(settings?.tableCount),
@@ -215,6 +227,8 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     setTtsActive(false);
     setTouchCart({});
     setConfirmed([]);
+    setPendingDraft([]);
+    setDraftEpochMs(Date.now());
     setMessages((m) => m.filter((x) => x.role !== "user"));
   }, []);
 
@@ -223,6 +237,8 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     setTtsActive(false);
     setTouchCart({});
     setConfirmed([]);
+    setPendingDraft([]);
+    setDraftEpochMs(0);
     setMessages([]);
   }, []);
 
@@ -242,11 +258,22 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         });
         setMessages((m) => [...m, { role: "assistant", content: res.content, at: new Date().toISOString() }]);
         playAssistantVoice(res.content, next);
+        if (Array.isArray(res.draftItems)) {
+          setPendingDraft(
+            res.draftItems.map((it) => ({
+              menuItemId: it.menuItemId,
+              name: it.name,
+              qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
+            })),
+          );
+        }
         if (res.paymentFlow?.phase === "ready") {
           orderToastRef.current?.("Cuenta enviada a caja con datos de facturación.");
         }
         if (res.order) {
           setTouchCart({});
+          setPendingDraft([]);
+          setDraftEpochMs(Date.now());
           setConfirmed((c) => [
             {
               id: res.order!.id,
@@ -301,6 +328,8 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     setTouchCart,
     confirmed,
     setConfirmed,
+    pendingDraft,
+    orderDraftCorpus,
     clearOrder,
     clearConversation,
     sendWithText,

@@ -217,6 +217,7 @@ function sanitizeForSpeech(raw: string) {
   let t = String(raw ?? "");
   /** Marcadores de pedido interno: no deben oírse en voz. */
   t = t.replace(/<<<ORDER_JSON>>>[\s\S]*?<<<END_ORDER_JSON>>>/gi, " ");
+  t = t.replace(/<<<DRAFT_JSON>>>[\s\S]*?<<<END_DRAFT_JSON>>>/gi, " ");
   /** Cualquier otro bloque <<< … >>> residual */
   t = t.replace(/<<<[\s\S]*?>>>/g, " ");
   t = t.replace(/\*\*/g, "");

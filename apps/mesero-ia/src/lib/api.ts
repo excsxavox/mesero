@@ -137,6 +137,7 @@ export async function chatComplete(
   return json<{
     role: string;
     content: string;
+    draftItems?: { menuItemId: string; name: string; qty: number }[];
     order: Order | null;
     paymentFlow?: {
       tableNumber: number;

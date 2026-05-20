@@ -26,13 +26,34 @@ export function draftLinesFromCorpus(corpus: string, menu: MenuItem[]) {
   });
 }
 
-/** Líneas activas del pedido (carrito táctil + detectado en conversación, sin duplicar id). */
+export type DraftLineInput = { menuItemId: string; name: string; qty: number };
+
+function linesFromDraftInput(menu: MenuItem[], draft: DraftLineInput[] | undefined) {
+  if (!draft?.length) return [] as DisplayLine[];
+  const out: DisplayLine[] = [];
+  for (const it of draft) {
+    const m = menu.find((x) => x.id === it.menuItemId);
+    if (m && isOnMenu(m)) {
+      out.push({
+        menuItemId: it.menuItemId,
+        name: it.name || m.name,
+        qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
+        unitPrice: m.price,
+      });
+    }
+  }
+  return out;
+}
+
+/** Líneas activas del pedido (borrador IA + carrito táctil + texto del cliente). */
 export function mergedActiveLines(
   menu: MenuItem[],
   corpus: string,
   touchCart: Record<string, number> | undefined,
+  assistantDraft?: DraftLineInput[],
 ) {
   const map = new Map<string, DisplayLine>();
+  for (const it of linesFromDraftInput(menu, assistantDraft)) map.set(it.menuItemId, it);
   for (const it of touchCartLines(menu, touchCart)) map.set(it.menuItemId, it);
   for (const it of draftLinesFromCorpus(corpus, menu)) {
     const prev = map.get(it.menuItemId);

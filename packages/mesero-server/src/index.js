@@ -1121,9 +1121,13 @@ ${tableRule}
 
 ${priceRule}${kitchenBlock}
 
+Mientras el cliente arma el pedido SIN confirmación final, incluye SIEMPRE al final (después de tu mensaje visible) un bloque:
+<<<DRAFT_JSON>>>{"items":[{"menuItemId":"id-del-menu","qty":1,"notes":""}]}<<<END_DRAFT_JSON>>>
+con los platos que el cliente pidió o aceptó para este pedido en construcción (usa solo menuItemId del menú). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó.
+
 Para registrar un pedido confirmado, cuando el cliente confirme explícitamente, incluye al final un bloque JSON en una sola línea con este formato exacto:
 <<<ORDER_JSON>>>{"table":"Mesa X o vacío","items":[{"menuItemId":"m1","qty":2,"notes":"sin cebolla"}],"notes":"notas generales"}<<<END_ORDER_JSON>>>
-Solo incluye ese bloque cuando el pedido esté confirmado por el cliente.`;
+Solo incluye ese bloque cuando el pedido esté confirmado por el cliente. Tras confirmar, omite DRAFT_JSON o envía {"items":[]}.`;
 }
 
 const app = express();
@@ -1888,6 +1892,34 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+function resolveStructuredMenuLines(rawItems, menu) {
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  return items
+    .map((it) => {
+      const mi = menu.find((m) => m.id === it.menuItemId);
+      return {
+        menuItemId: String(it.menuItemId ?? "").trim(),
+        name: mi?.name || String(it.menuItemId ?? "").trim(),
+        qty: Math.max(1, Math.min(99, Math.floor(Number(it.qty)) || 1)),
+        notes: it.notes || "",
+      };
+    })
+    .filter((line) => {
+      const mi = menu.find((m) => m.id === line.menuItemId);
+      return line.menuItemId && mi && mi.available !== false;
+    });
+}
+
+function extractTaggedJsonBlock(content, tag) {
+  const re = new RegExp(`<<<${tag}_JSON>>>([\\s\\S]*?)<<<END_${tag}_JSON>>>`);
+  const match = String(content ?? "").match(re);
+  if (!match) return { body: null, content: String(content ?? "") };
+  return {
+    body: match[1],
+    content: String(content ?? "").replace(match[0], ""),
+  };
+}
+
 /** Parse ORDER_JSON from assistant message and persist */
 app.post("/api/chat/complete", async (req, res) => {
   const { messages, selectedTable, kitchenOrderIds, appMode } = req.body || {};
@@ -1914,6 +1946,24 @@ app.post("/api/chat/complete", async (req, res) => {
     return;
   }
 
+  let draftItems = [];
+  if (appMode !== "reception") {
+    const draftExtract = extractTaggedJsonBlock(content, "DRAFT");
+    content = draftExtract.content;
+    if (draftExtract.body != null) {
+      try {
+        const raw = JSON.parse(draftExtract.body.trim());
+        draftItems = resolveStructuredMenuLines(raw.items, menu).map((line) => ({
+          menuItemId: line.menuItemId,
+          name: line.name,
+          qty: line.qty,
+        }));
+      } catch {
+        draftItems = [];
+      }
+    }
+  }
+
   let order = null;
   const match =
     appMode === "reception"
@@ -1922,21 +1972,7 @@ app.post("/api/chat/complete", async (req, res) => {
   if (match) {
     try {
       const raw = JSON.parse(match[1].trim());
-      const items = Array.isArray(raw.items) ? raw.items : [];
-      const resolved = items
-        .map((it) => {
-          const mi = menu.find((m) => m.id === it.menuItemId);
-          return {
-            menuItemId: it.menuItemId,
-            name: mi?.name || it.menuItemId,
-            qty: Number(it.qty) || 1,
-            notes: it.notes || "",
-          };
-        })
-        .filter((line) => {
-          const mi = menu.find((m) => m.id === line.menuItemId);
-          return mi && mi.available !== false;
-        });
+      const resolved = resolveStructuredMenuLines(raw.items, menu);
       if (resolved.length === 0) {
         order = null;
       } else {
@@ -2019,13 +2055,14 @@ app.post("/api/chat/complete", async (req, res) => {
     }
   }
 
-  const visible = content.replace(
-    /<<<ORDER_JSON>>>[\s\S]*?<<<END_ORDER_JSON>>>/,
-    "",
-  );
+  const visible = content
+    .replace(/<<<ORDER_JSON>>>[\s\S]*?<<<END_ORDER_JSON>>>/, "")
+    .replace(/<<<DRAFT_JSON>>>[\s\S]*?<<<END_DRAFT_JSON>>>/, "")
+    .trim();
   res.json({
     role: "assistant",
-    content: visible.trim(),
+    content: visible,
+    draftItems,
     order,
     paymentFlow: paymentFlow
       ? {
