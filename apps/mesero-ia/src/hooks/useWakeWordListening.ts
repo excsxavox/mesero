@@ -373,5 +373,26 @@ export function useWakeWordListening(opts: WakeListenOpts) {
     setError(null);
   }, []);
 
-  return { supported, listening: sessionActive, error, clearError };
+  /** Tras conceder permiso (p. ej. desde Administración → Modo ejecución). */
+  const activateMicrophone = useCallback(async () => {
+    if (!supported) return false;
+    fatalErrorRef.current = false;
+    setError(null);
+    await warmMicrophoneOnce();
+    warmedRef.current = true;
+    if (pausedRef.current || hiddenRef.current || slotRef.current !== 1) return true;
+    stopRec();
+    clearRestart();
+    startingRef.current = false;
+    restartTimerRef.current = window.setTimeout(() => startRecRef.current(), 400);
+    return true;
+  }, [supported, stopRec, clearRestart]);
+
+  useEffect(() => {
+    const onMicOk = () => void activateMicrophone();
+    window.addEventListener("mesero-mic-authorized", onMicOk);
+    return () => window.removeEventListener("mesero-mic-authorized", onMicOk);
+  }, [activateMicrophone]);
+
+  return { supported, listening: sessionActive, error, clearError, activateMicrophone };
 }

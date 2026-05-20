@@ -1,0 +1,9 @@
+# Túnel HTTPS hacia Mesero IA (nginx en 5173 → API/WS vía proxy interno)
+# El token va en .env como NGROK_AUTHTOKEN (lo lee el agente automáticamente).
+version: "3"
+tunnels:
+  mesero-ia:
+    addr: 5173
+    proto: http
+    schemes:
+      - https

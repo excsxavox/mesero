@@ -33,13 +33,13 @@ export default function App() {
               <Route element={<MeseroLayout />}>
                 <Route path="/" element={<ChatPage />} />
                 <Route path="/catalogo" element={<CatalogScreenPage />} />
-              </Route>
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminHome />} />
-                <Route path="flujo" element={<FlowPage />} />
-                <Route path="config" element={<SettingsPage />} />
-                <Route path="tema" element={<ThemePage />} />
-                <Route path="ejecucion" element={<ExecutionModePage />} />
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<AdminHome />} />
+                  <Route path="flujo" element={<FlowPage />} />
+                  <Route path="config" element={<SettingsPage />} />
+                  <Route path="tema" element={<ThemePage />} />
+                  <Route path="ejecucion" element={<ExecutionModePage />} />
+                </Route>
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

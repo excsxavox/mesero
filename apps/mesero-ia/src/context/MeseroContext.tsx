@@ -44,6 +44,8 @@ type MeseroContextValue = {
   listening: boolean;
   supported: boolean;
   voiceError: string | null;
+  /** Solicita permiso de micrófono y reinicia la escucha (usar tras error de voz). */
+  activateMicrophone: () => Promise<boolean>;
   needsMandatoryPasswordSetup: boolean;
   touchCart: Record<string, number>;
   setTouchCart: React.Dispatch<React.SetStateAction<Record<string, number>>>;
@@ -326,7 +328,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   const recognitionLang = useStableRecognitionLang(messages, wakeWord);
   const assistantName = useMemo(() => displayAssistantName(wakeWord), [wakeWord]);
 
-  const { supported, listening, error: voiceError } = useWakeWordListening({
+  const { supported, listening, error: voiceError, activateMicrophone } = useWakeWordListening({
     wakeWord,
     lang: recognitionLang,
     paused: busy || ttsActive || needsMandatoryPasswordSetup,
@@ -346,6 +348,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     listening,
     supported,
     voiceError,
+    activateMicrophone,
     needsMandatoryPasswordSetup,
     touchCart,
     setTouchCart,

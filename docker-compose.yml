@@ -1,0 +1,75 @@
+# Mesero — stack Docker
+# Puertos: 3041 API | 5173 mesero-ia | 5174 receptor | 5175 recepcion
+# (no chocan con botchatdanilo 15000/15001, n8n 5678, evolution 3001)
+
+services:
+  mesero-server:
+    build:
+      context: .
+      dockerfile: packages/mesero-server/Dockerfile
+    image: mesero_mesero-server:latest
+    container_name: mesero-server
+    ports:
+      - "3041:3041"
+    env_file:
+      - .env
+    environment:
+      PORT: "3041"
+      NODE_ENV: production
+      MESERO_DB_PATH: /app/packages/mesero-server/data/mesero.db
+      # API AIBox en el host (mismo servidor)
+      AIBOX_API_ORIGIN: ${AIBOX_API_ORIGIN:-http://host.docker.internal:15000}
+      AIBOX_AUTH_LOGIN_URL: ${AIBOX_AUTH_LOGIN_URL:-http://host.docker.internal:15000/api/security/auth/login}
+      # Facturación aún en host/PM2 hasta dockerizar facturacion-server
+      BILLING_URL: ${BILLING_URL:-http://host.docker.internal:3042}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Persistencia SQLite (reutiliza datos si ya existían con PM2)
+      - ./packages/mesero-server/data:/app/packages/mesero-server/data
+    restart: unless-stopped
+
+  mesero-ia:
+    build:
+      context: .
+      dockerfile: apps/Dockerfile
+      args:
+        APP_WORKSPACE: mesero-ia
+        VITE_AIBOX_COMPANY_ID: ${VITE_AIBOX_COMPANY_ID:-}
+    image: mesero_mesero-ia:latest
+    container_name: mesero-ia
+    ports:
+      - "5173:80"
+    depends_on:
+      - mesero-server
+    restart: unless-stopped
+
+  mesero-receptor:
+    build:
+      context: .
+      dockerfile: apps/Dockerfile
+      args:
+        APP_WORKSPACE: receptor-pedidos
+        VITE_AIBOX_COMPANY_ID: ${VITE_AIBOX_COMPANY_ID:-}
+    image: mesero_receptor:latest
+    container_name: mesero-receptor
+    ports:
+      - "5174:80"
+    depends_on:
+      - mesero-server
+    restart: unless-stopped
+
+  mesero-recepcion:
+    build:
+      context: .
+      dockerfile: apps/Dockerfile
+      args:
+        APP_WORKSPACE: recepcion-ia
+        VITE_AIBOX_COMPANY_ID: ${VITE_AIBOX_COMPANY_ID:-}
+    image: mesero_recepcion:latest
+    container_name: mesero-recepcion
+    ports:
+      - "5175:80"
+    depends_on:
+      - mesero-server
+    restart: unless-stopped

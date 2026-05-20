@@ -92,14 +92,17 @@ export function useAudioDevicePicker() {
     return () => md.removeEventListener("devicechange", onChange);
   }, [refresh]);
 
-  const authorize = async () => {
+  const authorize = async (): Promise<boolean> => {
     setMsg(null);
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
       s.getTracks().forEach((t) => t.stop());
       await refresh();
+      window.dispatchEvent(new Event("mesero-mic-authorized"));
+      return true;
     } catch {
-      setMsg("Permiso de micrófono denegado o no disponible.");
+      setMsg("Permiso de micrófono denegado o no disponible. Usa HTTPS o pulsa de nuevo tras permitir en el navegador.");
+      return false;
     }
   };
 

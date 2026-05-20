@@ -1,7 +1,10 @@
+import { useState } from "react";
+import { useMesero } from "../../context/MeseroContext";
 import { useAudioDevicePicker } from "../../lib/audioDevices";
 import { RestaurantLogo } from "../../components/mesero/RestaurantLogo";
 
 export function ExecutionModePage() {
+  const { voiceError, supported, activateMicrophone } = useMesero();
   const {
     inputs,
     outputs,
@@ -15,6 +18,24 @@ export function ExecutionModePage() {
     testOutput,
     supportsOutputPick,
   } = useAudioDevicePicker();
+  const [activating, setActivating] = useState(false);
+
+  const handleActivateMicrophone = async () => {
+    setActivating(true);
+    try {
+      const granted = await authorize();
+      if (granted) await activateMicrophone();
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const micEnvBlocked = typeof navigator !== "undefined" && !navigator.mediaDevices;
+  const msgLower = msg?.toLowerCase() ?? "";
+  const showMicAlert =
+    micEnvBlocked ||
+    Boolean(voiceError) ||
+    /denegad|mediadevices|https|localhost|no disponible|no expone/.test(msgLower);
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -28,7 +49,39 @@ export function ExecutionModePage() {
         </p>
       </div>
 
-      {msg ? (
+      {showMicAlert ? (
+        <div
+          className="space-y-3 rounded-xl border border-red-900/60 bg-red-950/35 px-4 py-4 ring-1 ring-red-800/40"
+          role="alert"
+        >
+          <p className="text-sm font-medium text-red-200">Micrófono no disponible en el quiosco</p>
+          {voiceError ? <p className="text-sm text-red-100/90">Voz: {voiceError}</p> : null}
+          {msg && !voiceError ? <p className="text-sm text-red-100/90">{msg}</p> : null}
+          {micEnvBlocked ? (
+            <p className="text-sm text-red-100/90">
+              Este entorno no expone <code className="text-red-50">mediaDevices</code> (usa HTTPS o localhost).
+            </p>
+          ) : null}
+          <p className="text-xs leading-relaxed text-red-200/70">
+            {micEnvBlocked
+              ? "Con HTTP y una IP pública el navegador no permite el micrófono. Configura HTTPS (certificado o túnel) y vuelve a abrir esta página."
+              : "Pulsa el botón y acepta el permiso cuando el navegador lo solicite. En producción usa HTTPS (no solo la IP en HTTP)."}
+          </p>
+          <button
+            type="button"
+            disabled={activating || !supported || micEnvBlocked}
+            onClick={() => void handleActivateMicrophone()}
+            className="w-full rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {activating ? "Activando…" : "Activar micrófono"}
+          </button>
+          {!supported ? (
+            <p className="text-xs text-amber-200/90">Este navegador no soporta reconocimiento de voz continuo.</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {msg && !showMicAlert ? (
         <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">{msg}</div>
       ) : null}
 
@@ -36,16 +89,24 @@ export function ExecutionModePage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            disabled={activating || micEnvBlocked}
+            onClick={() => void handleActivateMicrophone()}
+            className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {activating ? "Activando…" : "Activar micrófono"}
+          </button>
+          <button
+            type="button"
             onClick={() => void authorize()}
             className="rounded-lg bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-100 ring-1 ring-zinc-600 hover:bg-zinc-700"
           >
-            Autorizar micrófono (ver nombres)
+            Actualizar lista de dispositivos
           </button>
           <button
             type="button"
             disabled={testing}
             onClick={() => void testOutput()}
-            className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+            className="rounded-lg bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-100 ring-1 ring-zinc-600 hover:bg-zinc-700 disabled:opacity-50"
             title={supportsOutputPick ? "Tono corto en la salida elegida" : "Tu navegador puede no permitir elegir salida"}
           >
             {testing ? "Probando…" : "Probar salida"}
