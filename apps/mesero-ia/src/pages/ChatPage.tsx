@@ -8,7 +8,6 @@ import { MenuCategoryStrip } from "../components/mesero/MenuCategoryStrip";
 import { MeseroHeader } from "../components/mesero/MeseroHeader";
 import { MenuQrCard } from "../components/mesero/MenuQrCard";
 import { OrderSummaryCard } from "../components/mesero/OrderSummaryCard";
-import { TableSelector } from "../components/mesero/TableSelector";
 import { VoiceHintsCard } from "../components/mesero/VoiceHintsCard";
 import { useAuth } from "../context/AuthContext";
 import { useMesero } from "../context/MeseroContext";
@@ -48,9 +47,7 @@ export function ChatPage() {
     registerOrderToast,
     refreshSettings,
     selectedTable,
-    assignKioskTable,
     tableLabel,
-    tableCount,
   } = useMesero();
   const { theme, toggleTheme } = useMeseroTheme();
   const { companyName: profileCompanyName } = useAuth();
@@ -447,14 +444,6 @@ export function ChatPage() {
               />
             </div>
             <div className="flex min-w-0 flex-col gap-3 md:[grid-area:order] md:row-span-2 md:self-start">
-              {!selectedTable && !needsMandatoryPasswordSetup ? (
-                <TableSelector
-                  tableCount={tableCount}
-                  selectedTable={selectedTable}
-                  onSelect={assignKioskTable}
-                  disabled={busy}
-                />
-              ) : null}
               <MenuQrCard compact={hasActiveOrder} />
               <OrderSummaryCard
                 menu={menu}
