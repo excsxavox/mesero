@@ -1,0 +1,15 @@
+node_modules
+dist
+*.local
+.env
+.env.*
+!.env.example
+packages/mesero-server/data/store.json
+packages/mesero-server/data/store.json.migrated.bak
+packages/mesero-server/data/mesero.db
+packages/mesero-server/data/mesero.db-wal
+packages/mesero-server/data/mesero.db-shm
+packages/facturacion-server/data/
+*.p12
+*.pfx
+.DS_Store

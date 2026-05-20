@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Mesero">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="24" fill="#18181b"/>
+  <circle cx="60" cy="60" r="44" fill="url(#g)" opacity="0.95"/>
+  <path fill="#18181b" d="M38 52c0-12 10-22 22-22s22 10 22 22v16c0 12-10 22-22 22S38 80 38 68V52zm12 0v16c0 5.5 4.5 10 10 10s10-4.5 10-10V52c0-5.5-4.5-10-10-10s-10 4.5-10 10z"/>
+  <ellipse cx="60" cy="88" rx="18" ry="6" fill="#18181b" opacity="0.35"/>
+</svg>

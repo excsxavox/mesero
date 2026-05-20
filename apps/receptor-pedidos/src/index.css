@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+/* Tokens (igual que mesero-ia; cambian con data-mesero-theme) */
+:root,
+[data-mesero-theme="dark"] {
+  --theme-bg: #151b2e;
+  --theme-deep: #111825;
+  --theme-panel: #1a2238;
+  --theme-elevated: #222c46;
+  --theme-muted: #28324e;
+  --theme-line: #5b7fd6;
+  --theme-accent: #5b8dee;
+  --theme-accent-strong: #4a7ad4;
+  --theme-text: #e8eef4;
+  --theme-text-muted: #9eb0d4;
+  --theme-body-gradient: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(59, 90, 150, 0.28) 0%, transparent 50%),
+    linear-gradient(165deg, #151b2e 0%, #1a2238 48%, #111825 100%);
+  --theme-shadow: rgba(0, 0, 0, 0.35);
+
+  --panel-sidebar: var(--theme-deep);
+  --panel-card: var(--theme-panel);
+  --panel-border: var(--theme-muted);
+  --panel-purple: #7c3aed;
+  --panel-purple-dim: rgba(124, 58, 237, 0.15);
+  --panel-orange: #f59e0b;
+}
+
+[data-mesero-theme="light"] {
+  color-scheme: light;
+  --theme-bg: rgb(244, 246, 251);
+  --theme-deep: #e8ecf4;
+  --theme-panel: #ffffff;
+  --theme-elevated: #eef1f8;
+  --theme-muted: #dde3f0;
+  --theme-line: #4a6bb5;
+  --theme-accent: #3d6fd4;
+  --theme-accent-strong: #2f5cb8;
+  --theme-text: #1a2238;
+  --theme-text-muted: #5a6b8a;
+  --theme-body-gradient: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(91, 127, 214, 0.12) 0%, transparent 50%),
+    linear-gradient(165deg, rgb(244, 246, 251) 0%, #eef1f8 48%, #e8ecf4 100%);
+  --theme-shadow: rgba(26, 34, 56, 0.08);
+
+  --panel-sidebar: var(--theme-deep);
+  --panel-card: var(--theme-panel);
+  --panel-border: var(--theme-muted);
+  --panel-purple-dim: rgba(124, 58, 237, 0.1);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+  background: var(--theme-body-gradient);
+  background-attachment: fixed;
+  color: var(--theme-text);
+  transition: background 0.25s ease, color 0.2s ease;
+}
+
+#root {
+  min-height: 100%;
+}
+
+/* Textos zinc → tokens en modo claro */
+[data-mesero-theme="light"] .text-zinc-50,
+[data-mesero-theme="light"] .text-zinc-100,
+[data-mesero-theme="light"] .text-zinc-200,
+[data-mesero-theme="light"] .text-zinc-300 {
+  color: var(--theme-text);
+}
+
+[data-mesero-theme="light"] .text-zinc-400,
+[data-mesero-theme="light"] .text-zinc-500,
+[data-mesero-theme="light"] .text-zinc-600 {
+  color: var(--theme-text-muted);
+}
+
+[data-mesero-theme="light"] .hover\:text-zinc-200:hover,
+[data-mesero-theme="light"] .hover\:text-zinc-300:hover {
+  color: var(--theme-text);
+}
+
+[data-mesero-theme="light"] .hover\:bg-zinc-800\/50:hover,
+[data-mesero-theme="light"] .hover\:bg-zinc-800\/60:hover {
+  background-color: color-mix(in srgb, var(--theme-muted) 55%, transparent);
+}
+
+[data-mesero-theme="light"] .bg-zinc-700 {
+  background-color: var(--theme-muted);
+}
+
+[data-mesero-theme="light"] .bg-zinc-900\/40,
+[data-mesero-theme="light"] .bg-zinc-900\/50,
+[data-mesero-theme="light"] .bg-zinc-900\/60,
+[data-mesero-theme="light"] .bg-zinc-900\/70,
+[data-mesero-theme="light"] .bg-zinc-950\/40,
+[data-mesero-theme="light"] .bg-zinc-950\/50 {
+  background-color: color-mix(in srgb, var(--theme-elevated) 85%, transparent);
+}
+
+[data-mesero-theme="light"] .border-zinc-800,
+[data-mesero-theme="light"] .border-zinc-800\/80,
+[data-mesero-theme="light"] .ring-zinc-800\/80 {
+  border-color: var(--theme-muted);
+  --tw-ring-color: color-mix(in srgb, var(--theme-muted) 80%, transparent);
+}
+
+[data-mesero-theme="light"] .text-violet-200 {
+  color: var(--theme-accent-strong);
+}

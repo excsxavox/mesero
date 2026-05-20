@@ -1,0 +1,20 @@
+{
+  "name": "app-mesero",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,billing,mesero,receptor,recepcion -c blue,yellow,green,magenta,cyan \"npm run dev -w mesero-server\" \"npm run dev -w facturacion-server\" \"npm run dev -w mesero-ia\" \"npm run dev -w receptor-pedidos\" \"npm run dev -w recepcion-ia\"",
+    "dev:billing": "npm run dev -w facturacion-server",
+    "dev:server": "npm run dev -w mesero-server",
+    "dev:mesero": "npm run dev -w mesero-ia",
+    "dev:receptor": "npm run dev -w receptor-pedidos",
+    "dev:recepcion": "npm run dev -w recepcion-ia",
+    "build": "npm run build -w mesero-server && npm run build -w mesero-ia && npm run build -w receptor-pedidos && npm run build -w recepcion-ia"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* Tokens semánticos (cambian con data-recepcion-theme) */
+:root,
+[data-recepcion-theme="dark"] {
+  --theme-bg: #0f1a1c;
+  --theme-deep: #0c1517;
+  --theme-panel: #142428;
+  --theme-elevated: #1b3034;
+  --theme-muted: #243a3f;
+  --theme-line: #3d8f8a;
+  --theme-accent: #2dd4bf;
+  --theme-accent-strong: #14b8a6;
+  --theme-text: #e6f4f2;
+  --theme-text-muted: #8fb8b3;
+  --theme-body-gradient: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(45, 212, 191, 0.18) 0%, transparent 50%),
+    linear-gradient(165deg, #0f1a1c 0%, #142428 48%, #0c1517 100%);
+  --theme-shadow: rgba(0, 0, 0, 0.35);
+}
+
+[data-recepcion-theme="light"] {
+  --theme-bg: #f0faf9;
+  --theme-deep: #e0f2f1;
+  --theme-panel: #ffffff;
+  --theme-elevated: #ecf8f6;
+  --theme-muted: #cce8e4;
+  --theme-line: #0d9488;
+  --theme-accent: #0d9488;
+  --theme-accent-strong: #0f766e;
+  --theme-text: #134e4a;
+  --theme-text-muted: #5b7c78;
+  --theme-body-gradient: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(13, 148, 136, 0.1) 0%, transparent 50%),
+    linear-gradient(165deg, #f0faf9 0%, #ecf8f6 48%, #e0f2f1 100%);
+  --theme-shadow: rgba(19, 78, 74, 0.08);
+}
+
+@theme {
+  --color-mesero-bg: var(--theme-bg);
+  --color-mesero-deep: var(--theme-deep);
+  --color-mesero-panel: var(--theme-panel);
+  --color-mesero-elevated: var(--theme-elevated);
+  --color-mesero-muted: var(--theme-muted);
+  --color-mesero-line: var(--theme-line);
+  --color-mesero-accent: var(--theme-accent);
+  --color-mesero-accent-strong: var(--theme-accent-strong);
+  --color-mesero-text: var(--theme-text);
+  --color-mesero-text-muted: var(--theme-text-muted);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+  background: var(--theme-body-gradient);
+  color: var(--theme-text);
+  transition: background 0.25s ease, color 0.2s ease;
+}
