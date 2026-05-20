@@ -1386,14 +1386,16 @@ app.get("/api/menu/items/:id/image", (req, res) => {
     return;
   }
   res.setHeader("Content-Type", img.mime);
-  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.setHeader("Cache-Control", "no-store, must-revalidate");
+  res.setHeader("ETag", `"${img.version}"`);
   res.send(img.buffer);
 });
 
 app.get("/api/menu", async (req, res) => {
   try {
-    if (req.query.refresh === "1") invalidateCatalogCache();
-    const menu = await getResolvedCatalog(store.menu);
+    const refresh = req.query.refresh === "1";
+    if (refresh) invalidateCatalogCache();
+    const menu = await getResolvedCatalog(store.menu, { refresh });
     res.json(sortMenuByCategory(menu));
   } catch (e) {
     res.status(500).json({ error: String(e?.message ?? e) });

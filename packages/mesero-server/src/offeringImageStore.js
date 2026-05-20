@@ -1,6 +1,6 @@
 /** Caché en memoria de imágenes data-URL de offerings AIBox (clave = offering id). */
 
-/** @type {Map<string, { mime: string; buffer: Buffer }>} */
+/** @type {Map<string, { mime: string; buffer: Buffer; version: number }>} */
 const byId = new Map();
 
 /** Tamaño máximo del string data-URL a almacenar (~3 MB de JPEG en base64). */
@@ -39,8 +39,9 @@ export function storeOfferingDataImage(id, dataUrl) {
   if (!key) return false;
   const parsed = parseDataImageUrl(dataUrl);
   if (!parsed) return false;
-  byId.set(key, parsed);
-  return true;
+  const version = Date.now();
+  byId.set(key, { ...parsed, version });
+  return version;
 }
 
 /**
@@ -52,7 +53,13 @@ export function getOfferingImage(id) {
   return key ? byId.get(key) ?? null : null;
 }
 
-export function offeringImageProxyPath(id) {
+/**
+ * @param {string} id
+ * @param {number} [version]
+ */
+export function offeringImageProxyPath(id, version) {
   const key = String(id || "").trim();
-  return key ? `/api/menu/items/${encodeURIComponent(key)}/image` : "";
+  if (!key) return "";
+  const v = Number.isFinite(version) ? Math.round(version) : Date.now();
+  return `/api/menu/items/${encodeURIComponent(key)}/image?v=${v}`;
 }

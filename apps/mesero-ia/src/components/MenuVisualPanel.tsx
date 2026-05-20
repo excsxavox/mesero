@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { MenuItem } from "../lib/types";
 import { sortMenuByCategoryThenName } from "../lib/menuSort";
+import { MenuItemImage } from "./mesero/MenuItemImage";
 
 type Props = {
   menu: MenuItem[];
@@ -12,28 +13,6 @@ type Props = {
 function formatPrice(n: number) {
   if (typeof n !== "number" || Number.isNaN(n)) return "—";
   return new Intl.NumberFormat("es", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
-}
-
-function DishPhoto({ src }: { src: string }) {
-  const [ok, setOk] = useState(true);
-  if (!ok) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-mesero-muted text-[11px] text-mesero-text-muted">
-        Sin imagen
-      </div>
-    );
-  }
-  return (
-    <img
-      src={src}
-      alt=""
-      className="h-full w-full object-cover"
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => setOk(false)}
-    />
-  );
 }
 
 type CatBlock = { category: string; items: MenuItem[] };
@@ -90,7 +69,6 @@ export function MenuVisualPanel({ menu, className = "", filterCategory = null }:
             <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-2">
               {block.items.map((m) => {
                 const off = m.available === false;
-                const src = (m.imageUrl ?? "").trim();
                 return (
                   <article
                     key={m.id}
@@ -99,13 +77,10 @@ export function MenuVisualPanel({ menu, className = "", filterCategory = null }:
                     }`}
                   >
                     <div className="relative aspect-[4/3] w-full bg-mesero-muted">
-                      {src ? (
-                        <DishPhoto src={src} />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[11px] text-mesero-text-muted">
-                          Sin imagen
-                        </div>
-                      )}
+                      <MenuItemImage
+                        src={m.imageUrl}
+                        fallbackClassName="flex h-full w-full items-center justify-center bg-mesero-muted text-[11px] text-mesero-text-muted"
+                      />
                       {off ? (
                         <span className="absolute left-1 top-1 rounded bg-mesero-muted/90 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-200/95 ring-1 ring-amber-700/50">
                           Agotado

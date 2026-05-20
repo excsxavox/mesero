@@ -41,8 +41,11 @@ export async function verifyAdminExitPassword(password: string) {
   return json<{ ok: boolean }>(r);
 }
 
-export async function getMenu() {
-  return json<MenuItem[]>(await authFetch("/api/menu"));
+export async function getMenu(options?: { refresh?: boolean }) {
+  const q = options?.refresh ? "?refresh=1" : "";
+  return json<MenuItem[]>(
+    await authFetch(`/api/menu${q}`, { cache: "no-store" }),
+  );
 }
 
 export async function putMenu(menu: MenuItem[]) {

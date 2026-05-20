@@ -50,8 +50,9 @@ export async function getResolvedCatalog(fallbackMenu, opts = {}) {
     clearOfferingImages();
     const items = mapOfferingsBodyToMenuItems(body, {
       storeDataImage: (id, dataUrl) => {
-        if (!storeOfferingDataImage(id, dataUrl)) return undefined;
-        return offeringImageProxyPath(id);
+        const version = storeOfferingDataImage(id, dataUrl);
+        if (!version) return undefined;
+        return offeringImageProxyPath(id, version);
       },
     });
     cacheByCompany.set(key, { at: Date.now(), items });

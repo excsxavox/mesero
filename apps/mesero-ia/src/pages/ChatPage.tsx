@@ -4,11 +4,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { saveMeseroSession } from "../lib/meseroSessionStorage";
 import { KarenProfileCard } from "../components/mesero/KarenProfileCard";
 import { VoiceOrb } from "../components/mesero/VoiceOrb";
-import { MenuCategoryStrip } from "../components/mesero/MenuCategoryStrip";
 import { MeseroHeader } from "../components/mesero/MeseroHeader";
 import { MenuQrCard } from "../components/mesero/MenuQrCard";
 import { OrderSummaryCard } from "../components/mesero/OrderSummaryCard";
+import { MenuQuickPanel } from "../components/mesero/MenuQuickPanel";
 import { VoiceHintsCard } from "../components/mesero/VoiceHintsCard";
+import { VoiceListeningCard } from "../components/mesero/VoiceListeningCard";
 import { useAuth } from "../context/AuthContext";
 import { useMesero } from "../context/MeseroContext";
 import { useMeseroTheme } from "../context/MeseroThemeContext";
@@ -20,8 +21,8 @@ import {
   setAdminEntryUnlocked,
   setAdminExitLockArmed,
 } from "../lib/adminExitLock";
-import { getHealth, getMenu, putSettings, verifyAdminExitPassword } from "../lib/api";
-import type { MenuItem } from "../lib/types";
+import { useRefreshableMenu } from "../hooks/useRefreshableMenu";
+import { getHealth, putSettings, verifyAdminExitPassword } from "../lib/api";
 
 type AdminGateMode = null | { kind: "disarm" } | { kind: "navigate"; to: string };
 
@@ -52,7 +53,7 @@ export function ChatPage() {
   const { theme, toggleTheme } = useMeseroTheme();
   const { companyName: profileCompanyName } = useAuth();
 
-  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const { menu } = useRefreshableMenu();
   const [input, setInput] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [lockArmed, setLockArmed] = useState(() => isAdminExitLockArmed());
@@ -105,11 +106,14 @@ export function ChatPage() {
   );
 
   const menuCategories = useMemo(() => categoryPreviewsForStrip(menu, [], 12), [menu]);
+  const quickMenuCategories = useMemo(() => menuCategories.slice(0, 4), [menuCategories]);
 
   const hasActiveOrder = useMemo(
     () => mergedActiveLines(menu, orderDraftCorpus, touchCart).length > 0,
     [menu, orderDraftCorpus, touchCart],
   );
+
+  const wakeMode = listening && !busy && !ttsActive;
 
   const flashToast = useCallback((msg: string) => {
     setToast(msg);
@@ -134,10 +138,6 @@ export function ChatPage() {
     },
     [navigate, touchCart, orderDraftCorpus, messages, selectedTable],
   );
-
-  useEffect(() => {
-    getMenu().then(setMenu).catch(() => setMenu([]));
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,21 +459,16 @@ export function ChatPage() {
                 onTouchDelta={needsMandatoryPasswordSetup ? undefined : bumpTouchDelta}
               />
             </div>
-            <div className="min-w-0 md:[grid-area:categories]">
-              <MenuCategoryStrip
-                layout="panel"
-                categories={menuCategories}
+            <div className="flex min-w-0 flex-col gap-3 md:[grid-area:categories]">
+              <VoiceHintsCard assistantName={assistantName} />
+              <VoiceListeningCard assistantName={assistantName} active={wakeMode || ttsActive} />
+            </div>
+            <div className="min-w-0 md:[grid-area:hints] md:self-stretch">
+              <MenuQuickPanel
+                categories={quickMenuCategories}
                 disabled={needsMandatoryPasswordSetup}
                 onSelectCategory={(cat) => openCatalog(cat)}
                 onViewCatalog={() => openCatalog(null)}
-              />
-            </div>
-            <div className="min-w-0 md:[grid-area:hints] md:self-stretch">
-              <VoiceHintsCard
-                assistantName={assistantName}
-                listening={listening}
-                busy={busy}
-                ttsActive={ttsActive}
               />
             </div>
           </div>

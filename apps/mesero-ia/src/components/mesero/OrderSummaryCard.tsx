@@ -8,6 +8,7 @@ import {
   type ConfirmedBundle,
 } from "../../lib/orderDisplayLines";
 import { orderStatusBadgeClass, orderStatusLabel } from "../../lib/orderStatusLabels";
+import { MenuItemImage } from "./MenuItemImage";
 
 type Props = {
   menu: MenuItem[];
@@ -101,21 +102,10 @@ export function OrderSummaryCard({
           {lines.map((it) => {
             const sub = lineSubtotal(it);
             const m = menuById.get(it.menuItemId);
-            const img = (m?.imageUrl ?? "").trim();
             return (
               <li key={it.menuItemId} className="flex items-center gap-2.5">
                 <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-mesero-muted ring-1 ring-mesero-line/15">
-                  {img ? (
-                    <img
-                      src={img}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-lg text-mesero-accent/35">🍽️</div>
-                  )}
+                  <MenuItemImage src={m?.imageUrl} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>

@@ -1,4 +1,5 @@
 import type { MenuCategoryPreview } from "../../lib/menuCategories";
+import { MenuItemImage } from "./MenuItemImage";
 
 type Props = {
   categories: MenuCategoryPreview[];
@@ -10,15 +11,14 @@ type Props = {
 };
 
 function CategoryCard({ cat, panel }: { cat: MenuCategoryPreview; panel?: boolean }) {
-  const src = (cat.imageUrl ?? "").trim();
   return (
     <div
       className={`relative aspect-[4/3] overflow-hidden rounded-xl border border-mesero-line/15 bg-mesero-muted ring-1 ring-mesero-line/10 ${
         panel ? "w-full min-w-0" : "w-[9.5rem] shrink-0 sm:w-[10.5rem]"
       }`}
     >
-      {src ? (
-        <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+      {cat.imageUrl?.trim() ? (
+        <MenuItemImage src={cat.imageUrl} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-mesero-panel/60 to-mesero-bg text-2xl">
           🍽️

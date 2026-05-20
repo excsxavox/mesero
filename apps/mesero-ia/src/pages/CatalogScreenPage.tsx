@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CatalogKarenProfile } from "../components/catalog/CatalogSidebarPanel";
 import { CatalogOrderSummary } from "../components/catalog/CatalogOrderSummary";
@@ -6,7 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import { useMesero } from "../context/MeseroContext";
 import { useMeseroTheme } from "../context/MeseroThemeContext";
 import { ThemeToggleButton } from "../components/mesero/ThemeToggleButton";
-import { getMenu } from "../lib/api";
+import { useRefreshableMenu } from "../hooks/useRefreshableMenu";
+import { MenuItemImage } from "../components/mesero/MenuItemImage";
 import { sortMenuByCategoryThenName } from "../lib/menuSort";
 import { formatMoney, mergedActiveLines, orderTotal } from "../lib/orderDisplayLines";
 import { quoteWakeWord } from "../lib/wakeWord";
@@ -87,15 +88,10 @@ function ProductCard({
   item: MenuItem;
   onAdd: () => void;
 }) {
-  const src = (item.imageUrl ?? "").trim();
   return (
     <article className="flex w-[11.5rem] shrink-0 flex-col overflow-hidden rounded-xl border border-mesero-line/15 bg-mesero-elevated/90 ring-1 ring-mesero-line/10 sm:w-[12.5rem]">
       <div className="relative aspect-[4/3] bg-mesero-muted">
-        {src ? (
-          <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-2xl text-mesero-accent/40">🍽️</div>
-        )}
+        <MenuItemImage src={item.imageUrl} />
       </div>
       <div className="flex flex-1 flex-col p-3">
         <h3 className="line-clamp-1 text-sm font-semibold text-mesero-text">{item.name}</h3>
@@ -138,8 +134,7 @@ export function CatalogScreenPage() {
   const { theme, toggleTheme } = useMeseroTheme();
   const { companyName: profileCompanyName } = useAuth();
 
-  const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [menuLoading, setMenuLoading] = useState(true);
+  const { menu, menuLoading } = useRefreshableMenu();
   const restaurantName =
     profileCompanyName || settings?.restaurantName?.trim() || "Mi restaurante";
   const [search, setSearch] = useState("");
@@ -149,14 +144,6 @@ export function CatalogScreenPage() {
     () => messages.filter((m) => m.role === "user").map((m) => m.content).join(" "),
     [messages],
   );
-
-  useEffect(() => {
-    setMenuLoading(true);
-    void getMenu()
-      .then(setMenu)
-      .catch(() => setMenu([]))
-      .finally(() => setMenuLoading(false));
-  }, []);
 
   const blocks = useMemo(() => groupByCategory(menu), [menu]);
   const categories = useMemo(() => blocks.map((b) => b.category), [blocks]);
