@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Outlet, useSearchParams } from "react-router-dom";
 import { KioskFullscreenGuard } from "../components/mesero/KioskFullscreenGuard";
-import { speakTextAsync, stopSpeaking } from "../hooks/useVoiceDictation";
+import { preloadSpeechVoices, speakTextAsync, stopSpeaking } from "../hooks/useVoiceDictation";
 import { useStableRecognitionLang } from "../hooks/useStableRecognitionLang";
 import { useOrderStatusSync } from "../hooks/useOrderStatusSync";
 import { useWakeWordListening } from "../hooks/useWakeWordListening";
@@ -198,9 +198,21 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    preloadSpeechVoices();
     void refreshSettings();
     return () => stopSpeaking();
   }, [refreshSettings]);
+
+  /** En tablet/móvil las voces del sistema a veces no cargan hasta el primer toque. */
+  useEffect(() => {
+    const warm = () => preloadSpeechVoices();
+    window.addEventListener("pointerdown", warm, { once: true, passive: true });
+    window.addEventListener("touchstart", warm, { once: true, passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", warm);
+      window.removeEventListener("touchstart", warm);
+    };
+  }, []);
 
   useEffect(() => {
     const onFocus = () => void refreshSettings();

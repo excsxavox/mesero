@@ -129,9 +129,32 @@ export function useVoiceDictation(options: Opts) {
   return { supported, listening, error, start, stop, takeLiveText, clearError: () => setError(null) };
 }
 
+let voicesCache: SpeechSynthesisVoice[] = [];
+let voicesPreloadAttached = false;
+
+/** Carga voces al abrir la app (Chrome las lista tarde → sin esto hay ~700 ms de silencio y voz robótica por defecto). */
+export function preloadSpeechVoices(): void {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  const sync = () => {
+    const list = window.speechSynthesis.getVoices();
+    if (list.length) voicesCache = list;
+  };
+  sync();
+  if (!voicesPreloadAttached) {
+    voicesPreloadAttached = true;
+    window.speechSynthesis.addEventListener("voiceschanged", sync);
+  }
+}
+
+function availableVoices(): SpeechSynthesisVoice[] {
+  if (typeof window === "undefined" || !window.speechSynthesis) return [];
+  const live = window.speechSynthesis.getVoices();
+  if (live.length) voicesCache = live;
+  return voicesCache.length ? voicesCache : live;
+}
+
 function pickBestVoice(lang: string): SpeechSynthesisVoice | undefined {
-  if (typeof window === "undefined" || !window.speechSynthesis) return undefined;
-  const voices = window.speechSynthesis.getVoices();
+  const voices = availableVoices();
   if (!voices.length) return undefined;
   const want = lang.replaceAll("_", "-").toLowerCase();
   const [p0, p1] = want.split("-");
@@ -148,24 +171,31 @@ function pickBestVoice(lang: string): SpeechSynthesisVoice | undefined {
     const n = v.name.toLowerCase();
     const l = v.lang.toLowerCase().replaceAll("_", "-");
     if (l === want || l.startsWith(`${want}`)) s += 5;
-    if (v.localService) s += 1;
-    if (n.includes("natural") || n.includes("neural") || n.includes("online")) s += 4;
+    /** Voces locales arrancan al instante; las “online/neural” suelen tardar y sonar peor al inicio. */
+    if (v.localService) s += 6;
+    else if (n.includes("online") || n.includes("network")) s -= 3;
+    if (primary === "es") {
+      if (n.includes("helena") || n.includes("monica") || n.includes("laura") || n.includes("sabina")) s += 4;
+      if (n.includes("google") && (n.includes("espa") || n.includes("spanish"))) s += 3;
+      if (n.includes("microsoft")) s += 2;
+    }
     if (primary === "en") {
       if (n.includes("google") || n.includes("microsoft")) s += 3;
       if (n.includes("jenny") || n.includes("guy") || n.includes("aria") || n.includes("samantha")) s += 2;
+      if (n.includes("natural") || n.includes("neural")) s += 2;
     }
     return s;
   };
   return [...pool].sort((a, b) => score(b) - score(a))[0];
 }
 
-function waitForVoices(maxMs = 700): Promise<void> {
+function waitForVoices(maxMs = 250): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       resolve();
       return;
     }
-    if (window.speechSynthesis.getVoices().length > 0) {
+    if (availableVoices().length > 0) {
       resolve();
       return;
     }
@@ -183,7 +213,25 @@ function configureUtterance(u: SpeechSynthesisUtterance, lang: string) {
   u.lang = lang;
   const voice = pickBestVoice(lang);
   if (voice) u.voice = voice;
-  u.rate = lang.toLowerCase().startsWith("en") ? 0.95 : 1;
+  const isEn = lang.toLowerCase().startsWith("en");
+  u.rate = isEn ? 1 : 1.08;
+  u.pitch = 1;
+}
+
+/** Texto corto para TTS: en pantalla va completo; hablar todo el menú tarda y suena monótono. */
+export function compactForSpeech(text: string, maxLen = 300): string {
+  const t = text.trim();
+  if (t.length <= maxLen) return t;
+  const parts = t.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) ?? [t];
+  let out = "";
+  for (const s of parts) {
+    const next = out + s;
+    if (next.length > maxLen && out.length > 0) break;
+    out = next;
+  }
+  const trimmed = out.trim();
+  if (trimmed.length >= 48) return trimmed;
+  return t.slice(0, maxLen).trim();
 }
 
 export function speakText(text: string, lang = "es-ES") {
@@ -196,6 +244,9 @@ export function speakText(text: string, lang = "es-ES") {
 
 /** Igual que `speakText` pero espera a que termine (o falle) la locución. */
 export function speakTextAsync(text: string, lang = "es-ES"): Promise<void> {
+  const phrase = compactForSpeech(sanitizeForSpeech(text));
+  if (!phrase) return Promise.resolve();
+
   return waitForVoices().then(
     () =>
       new Promise((resolve) => {
@@ -203,12 +254,24 @@ export function speakTextAsync(text: string, lang = "es-ES"): Promise<void> {
           resolve();
           return;
         }
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(sanitizeForSpeech(text));
+        const syn = window.speechSynthesis;
+        syn.cancel();
+        /** Chrome a veces deja la cola en pausa hasta el primer resume. */
+        try {
+          syn.resume();
+        } catch {
+          /* */
+        }
+        const u = new SpeechSynthesisUtterance(phrase);
         configureUtterance(u, lang);
         u.onend = () => resolve();
         u.onerror = () => resolve();
-        window.speechSynthesis.speak(u);
+        syn.speak(u);
+        try {
+          syn.resume();
+        } catch {
+          /* */
+        }
       }),
   );
 }
