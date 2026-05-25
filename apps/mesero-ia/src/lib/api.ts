@@ -2,12 +2,23 @@ import type { FlowState, MenuItem, Order, Settings, SettingsWrite } from "./type
 import { authFetch } from "./authSession";
 
 async function readApiError(r: Response): Promise<string> {
+  if (r.status === 413) {
+    return (
+      "El archivo es demasiado grande para el proxy (nginx). Sube un PDF de menos de 15 MB o pide al administrador " +
+      "aumentar client_max_body_size (p. ej. 20m) en nginx y reiniciar el servicio."
+    );
+  }
   const clone = r.clone();
   try {
     const data = (await r.json()) as { error?: string };
     if (typeof data?.error === "string" && data.error) return data.error;
   } catch {
     const t = await clone.text();
+    if (/entity too large/i.test(t)) {
+      return (
+        "El archivo supera el límite del proxy. Usa un PDF menor o configura client_max_body_size en nginx (≥ 20m)."
+      );
+    }
     const pre = t.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i)?.[1]?.trim();
     if (pre) return pre;
     if (t && !/<html/i.test(t)) return t.slice(0, 400);

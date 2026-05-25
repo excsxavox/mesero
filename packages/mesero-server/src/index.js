@@ -1159,7 +1159,8 @@ Solo incluye ese bloque cuando el pedido esté confirmado por el cliente. Tras c
 
 const app = express();
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: "2mb" }));
+/** JSON; subidas PDF usan multer (hasta 15 MB). Si nginx devuelve 413, subir client_max_body_size (ver deploy/nginx-mesero.conf.example). */
+app.use(express.json({ limit: "20mb" }));
 app.use(companyContextMiddleware(storeApi));
 
 app.get("/api/health", (_req, res) => {
