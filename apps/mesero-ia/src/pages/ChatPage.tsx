@@ -452,6 +452,7 @@ export function ChatPage() {
                 menu={menu}
                 corpus={orderInferenceCorpus}
                 pendingDraft={pendingDraft}
+                assistantSummary={lastAssistantText}
                 touchCart={touchCart}
                 confirmed={confirmed}
                 busy={busy}

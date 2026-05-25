@@ -2016,14 +2016,39 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+function foldMenuName(s) {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim();
+}
+
+function resolveMenuItemForStructuredLine(it, menu) {
+  const id = String(it.menuItemId ?? "").trim();
+  let mi = id ? menu.find((m) => m.id === id) : null;
+  const nameHint = String(it.name ?? "").trim();
+  if (!mi && nameHint) {
+    const folded = foldMenuName(nameHint);
+    mi =
+      menu.find((m) => foldMenuName(m.name) === folded) ||
+      menu.find((m) => foldMenuName(m.name).includes(folded) || folded.includes(foldMenuName(m.name)));
+    if (!mi) {
+      const inferred = inferMenuLinesFromText(nameHint, menu);
+      if (inferred[0]) mi = menu.find((m) => m.id === inferred[0].menuItemId) ?? null;
+    }
+  }
+  return mi;
+}
+
 function resolveStructuredMenuLines(rawItems, menu) {
   const items = Array.isArray(rawItems) ? rawItems : [];
   return items
     .map((it) => {
-      const mi = menu.find((m) => m.id === it.menuItemId);
+      const mi = resolveMenuItemForStructuredLine(it, menu);
       return {
-        menuItemId: String(it.menuItemId ?? "").trim(),
-        name: mi?.name || String(it.menuItemId ?? "").trim(),
+        menuItemId: mi?.id || String(it.menuItemId ?? "").trim(),
+        name: mi?.name || String(it.name ?? it.menuItemId ?? "").trim(),
         qty: Math.max(1, Math.min(99, Math.floor(Number(it.qty)) || 1)),
         notes: it.notes || "",
       };
@@ -2066,6 +2091,7 @@ app.post("/api/chat/complete", async (req, res) => {
   try {
     content = await generateAssistantChatContent(messages, menu, { selectedTable, kitchenOrderIds, appMode });
   } catch (e) {
+    console.error("[mesero-server] chat/complete:", e?.message ?? e);
     const status = e?.status === 502 ? 502 : 500;
     res.status(status).json({ error: String(e?.message ?? e), detail: e?.message });
     return;

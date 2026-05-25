@@ -15,6 +15,8 @@ type Props = {
   menu: MenuItem[];
   corpus: string;
   pendingDraft?: DraftLineInput[];
+  /** Resumen reciente del asistente (para detectar platos mencionados en voz). */
+  assistantSummary?: string;
   touchCart?: Record<string, number>;
   confirmed: ConfirmedBundle[];
   busy?: boolean;
@@ -76,6 +78,7 @@ export function OrderSummaryCard({
   menu,
   corpus,
   pendingDraft,
+  assistantSummary,
   touchCart,
   confirmed,
   busy,
@@ -85,8 +88,8 @@ export function OrderSummaryCard({
 }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const lines = useMemo(
-    () => mergedActiveLines(menu, corpus, touchCart, pendingDraft),
-    [menu, corpus, touchCart, pendingDraft],
+    () => mergedActiveLines(menu, corpus, touchCart, pendingDraft, assistantSummary),
+    [menu, corpus, touchCart, pendingDraft, assistantSummary],
   );
   const total = orderTotal(lines);
   const menuById = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);

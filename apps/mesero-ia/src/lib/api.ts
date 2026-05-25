@@ -155,7 +155,7 @@ export async function deleteMenuPdf() {
 
 export async function chatComplete(
   messages: { role: string; content: string }[],
-  options?: { selectedTable?: number | null; kitchenOrderIds?: string[] },
+  options?: { selectedTable?: number | null; kitchenOrderIds?: string[]; signal?: AbortSignal },
 ) {
   const body: {
     messages: typeof messages;
@@ -185,6 +185,7 @@ export async function chatComplete(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: options?.signal,
     }),
   );
 }

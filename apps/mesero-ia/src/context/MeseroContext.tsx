@@ -271,15 +271,23 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     async (raw: string) => {
       if (needsMandatoryPasswordSetup) return;
       const text = raw.trim();
-      if (!text || busy) return;
+      if (!text) return;
+      if (busy) {
+        pendingVoiceRef.current = text;
+        orderToastRef.current?.("Un momento, estoy respondiendo…");
+        return;
+      }
       const next: MeseroMsg[] = [...messages, { role: "user", content: text, at: new Date().toISOString() }];
       setMessages(next);
       setBusy(true);
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 50_000);
       try {
         const payload = next.map((m) => ({ role: m.role, content: m.content }));
         const res = await chatComplete(payload, {
           selectedTable,
           kitchenOrderIds: confirmedRef.current.map((c) => c.id),
+          signal: controller.signal,
         });
         setMessages((m) => [...m, { role: "assistant", content: res.content, at: new Date().toISOString() }]);
         playAssistantVoice(res.content, next);
@@ -312,18 +320,39 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
           orderToastRef.current?.("Pedido enviado a cocina.");
         }
       } catch (e) {
-        const errText = `No pude contactar al servidor: ${String(e)}`;
-        setMessages((m) => [...m, { role: "assistant", content: errText, at: new Date().toISOString() }]);
-        playAssistantVoice(errText, next);
+        const err =
+          e instanceof Error && e.name === "AbortError"
+            ? "La respuesta tardó demasiado. Intenta de nuevo."
+            : `No pude contactar al servidor: ${String(e)}`;
+        setMessages((m) => [...m, { role: "assistant", content: err, at: new Date().toISOString() }]);
+        playAssistantVoice(err, next);
       } finally {
+        window.clearTimeout(timeoutId);
         setBusy(false);
+        const pending = pendingVoiceRef.current?.trim();
+        if (pending) {
+          pendingVoiceRef.current = null;
+          window.setTimeout(() => void sendRef.current(pending), 400);
+        }
       }
     },
     [busy, messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable],
   );
 
+  useEffect(() => {
+    if (!busy) return;
+    const t = window.setTimeout(() => {
+      setBusy(false);
+      setTtsActive(false);
+      stopSpeaking();
+      orderToastRef.current?.("Se reinició el asistente tras una espera larga. Vuelve a hablar.");
+    }, 55_000);
+    return () => window.clearTimeout(t);
+  }, [busy]);
+
   const sendRef = useRef(sendWithText);
   sendRef.current = sendWithText;
+  const pendingVoiceRef = useRef<string | null>(null);
 
   const recognitionLang = useStableRecognitionLang(messages, wakeWord);
   const assistantName = useMemo(() => displayAssistantName(wakeWord), [wakeWord]);

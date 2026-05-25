@@ -69,20 +69,22 @@ function linesFromDraftInput(menu: MenuItem[], draft: DraftLineInput[] | undefin
   return out;
 }
 
-/** Líneas activas del pedido (borrador IA + carrito táctil + texto del cliente). */
+/** Líneas activas del pedido (borrador IA + carrito táctil + texto del cliente/asistente). */
 export function mergedActiveLines(
   menu: MenuItem[],
   corpus: string,
   touchCart: Record<string, number> | undefined,
   assistantDraft?: DraftLineInput[],
+  assistantSummary?: string,
 ) {
+  const inferCorpus = assistantSummary?.trim() ? `${corpus} ${assistantSummary}` : corpus;
   const map = new Map<string, DisplayLine>();
   for (const it of linesFromDraftInput(menu, assistantDraft)) map.set(it.menuItemId, it);
-  for (const it of draftLinesFromCorpus(corpus, menu)) {
+  for (const it of touchCartLines(menu, touchCart)) map.set(it.menuItemId, it);
+  for (const it of draftLinesFromCorpus(inferCorpus, menu)) {
     const prev = map.get(it.menuItemId);
     if (!prev || it.qty > prev.qty) map.set(it.menuItemId, it);
   }
-  for (const it of touchCartLines(menu, touchCart)) map.set(it.menuItemId, it);
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
