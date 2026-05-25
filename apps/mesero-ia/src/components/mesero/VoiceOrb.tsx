@@ -9,14 +9,14 @@ type Props = {
 };
 
 export function VoiceOrb({ assistantName, busy, ttsActive, listening, supported }: Props) {
-  const wakeMode = listening && !busy && !ttsActive;
-  const active = wakeMode || ttsActive;
+  const micWaiting = listening && !busy && !ttsActive;
+  const active = busy || ttsActive;
   const title = busy
     ? "PENSANDO…"
     : ttsActive
       ? "RESPONDIENDO…"
-      : wakeMode
-        ? "ESCUCHANDO…"
+      : micWaiting
+        ? "EN ESPERA"
         : supported
           ? "EN PAUSA"
           : "SIN VOZ";
@@ -24,8 +24,8 @@ export function VoiceOrb({ assistantName, busy, ttsActive, listening, supported 
     ? `${assistantName} está procesando tu mensaje`
     : ttsActive
       ? "Escucha la respuesta"
-      : wakeMode
-        ? "Habla ahora para realizar tu pedido"
+      : micWaiting
+        ? `Di «${assistantName}» al inicio para pedir (no responde sin su nombre)`
         : supported
           ? "El micrófono se reanuda en un momento"
           : "Este navegador no soporta reconocimiento de voz";
@@ -93,7 +93,7 @@ export function VoiceOrb({ assistantName, busy, ttsActive, listening, supported 
           <span
             key={i}
             className={`h-1.5 w-1.5 rounded-full ${
-              i === 0 && wakeMode ? "bg-mesero-active" : active ? "bg-mesero-active/70" : "bg-mesero-accent-strong/55"
+              active ? "bg-mesero-active/70" : micWaiting ? "bg-mesero-accent-strong/45" : "bg-mesero-accent-strong/55"
             }`}
           />
         ))}

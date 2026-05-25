@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AUDIO_INPUT_KEY } from "../lib/audioDevices";
+import { extractCommandIfWakeAtStart } from "../lib/wakeWord";
 
 interface SpeechRecAlternative {
   readonly transcript: string;
@@ -55,9 +56,9 @@ function getRecognitionCtor(): RecCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const POST_PAUSE_COOLDOWN_MS = 2800;
+const DEDUPE_MS = 2000;
+const MIN_COMMAND_LEN = 2;
 
 async function warmMicrophoneOnce() {
   if (!navigator.mediaDevices?.getUserMedia) return;
@@ -107,7 +108,9 @@ export function useWakeWordListening(opts: WakeListenOpts) {
   const supported = getRecognitionCtor() !== null;
 
   const recRef = useRef<SpeechRecognitionInstance | null>(null);
-  const sessionRef = useRef("");
+  const postPauseCooldownUntilRef = useRef(0);
+  const lastFiredRef = useRef({ text: "", at: 0 });
+  const wasPausedRef = useRef(opts.paused);
   const shuttingDownRef = useRef(false);
   const warmedRef = useRef(false);
   const restartTimerRef = useRef(0);
@@ -156,18 +159,28 @@ export function useWakeWordListening(opts: WakeListenOpts) {
     }, 120);
   }, [clearRestart]);
 
-  const tryExtractAndFire = useCallback(() => {
+  useEffect(() => {
+    if (wasPausedRef.current && !opts.paused) {
+      postPauseCooldownUntilRef.current = Date.now() + POST_PAUSE_COOLDOWN_MS;
+    }
+    wasPausedRef.current = opts.paused;
+  }, [opts.paused]);
+
+  const processFinalUtterance = useCallback((chunk: string) => {
     if (pausedRef.current || hiddenRef.current) return;
-    const line = sessionRef.current.trim();
-    if (!line) return;
-    const w = (wakeRef.current || "karen").trim();
-    const re = new RegExp(`\\b${escapeRegExp(w)}\\b`, "i");
-    if (!re.test(line)) return;
-    const parts = line.split(re);
-    const tail = (parts[parts.length - 1] ?? "").trim();
-    if (tail.length < 2) return;
-    sessionRef.current = "";
-    void Promise.resolve(onCommandRef.current(tail)).catch(() => null);
+    if (Date.now() < postPauseCooldownUntilRef.current) return;
+
+    const t = chunk.trim();
+    if (!t) return;
+    const w = wakeRef.current || "karen";
+    const command = extractCommandIfWakeAtStart(t, w, MIN_COMMAND_LEN);
+    if (!command) return;
+
+    const now = Date.now();
+    const last = lastFiredRef.current;
+    if (last.text === command && now - last.at < DEDUPE_MS) return;
+    lastFiredRef.current = { text: command, at: now };
+    void Promise.resolve(onCommandRef.current(command)).catch(() => null);
   }, []);
 
   const enterCooldown = useCallback(() => {
@@ -218,9 +231,7 @@ export function useWakeWordListening(opts: WakeListenOpts) {
           if (!r.isFinal) continue;
           const t = (r[0]?.transcript ?? "").trim();
           if (!t) continue;
-          sessionRef.current = `${sessionRef.current} ${t}`.trim();
-          if (sessionRef.current.length > 900) sessionRef.current = sessionRef.current.slice(-900);
-          tryExtractAndFire();
+          processFinalUtterance(t);
         }
       };
 
@@ -250,7 +261,7 @@ export function useWakeWordListening(opts: WakeListenOpts) {
         scheduleRestart();
       };
     },
-    [tryExtractAndFire, scheduleRestart],
+    [processFinalUtterance, scheduleRestart],
   );
 
   const startRec = useCallback(() => {

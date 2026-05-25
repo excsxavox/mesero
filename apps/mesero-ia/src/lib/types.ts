@@ -50,6 +50,8 @@ export type Settings = {
   menuPdfUrl?: string;
   /** Solo lectura (GET): indica si hay un PDF subido en el servidor. */
   menuPdfConfigured?: boolean;
+  /** Solo lectura (GET): empresa del contexto AIBox (para URLs del QR). */
+  companyId?: string;
   /** Solo lectura (GET): indica si ya hay contraseña del candado guardada en el servidor. */
   adminExitPasswordConfigured?: boolean;
 };

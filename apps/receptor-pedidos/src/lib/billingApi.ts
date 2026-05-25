@@ -75,9 +75,11 @@ export async function fetchBillingConfig(): Promise<{
 }
 
 export async function saveBillingConfig(config: BillingConfig): Promise<BillingConfig> {
-  const payload = { ...config };
-  if (payload.certificatePassword === "***") delete payload.certificatePassword;
-  delete payload.certificatePath;
+  const { certificatePath: _omitPath, certificatePassword, ...rest } = config;
+  const payload: Omit<BillingConfig, "certificatePath" | "certificatePassword"> & {
+    certificatePassword?: string;
+  } = { ...rest };
+  if (certificatePassword !== "***") payload.certificatePassword = certificatePassword;
   const r = await authFetch("/api/billing/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

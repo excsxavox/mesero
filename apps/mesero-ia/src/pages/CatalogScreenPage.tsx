@@ -130,7 +130,6 @@ export function CatalogScreenPage() {
     setTouchCart,
     assistantName,
     wakeWord,
-    orderDraftCorpus,
     orderInferenceCorpus,
     pendingDraft,
   } = useMesero();

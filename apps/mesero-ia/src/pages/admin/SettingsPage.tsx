@@ -168,7 +168,7 @@ export function SettingsPage() {
         </label>
 
         <label className={labelClass}>
-          Palabra de activación (comando de voz)
+          Nombre del bot (palabra clave de voz)
           <input
             className={inputClass}
             value={form.wakeWord ?? ""}
@@ -178,7 +178,7 @@ export function SettingsPage() {
             spellCheck={false}
           />
           <span className="mt-1.5 block text-xs leading-relaxed text-zinc-500">
-            El cliente la dice para activar el micrófono (p. ej. «{assistantPreview}, quiero una hamburguesa»). Solo
+            El cliente debe decir este nombre antes de cada pedido (p. ej. «{assistantPreview}, quiero una hamburguesa»). Solo
             letras y números, 2–24 caracteres. En el quiosco se muestra como{" "}
             <strong className="font-medium text-zinc-400">{assistantPreview}</strong>.
           </span>

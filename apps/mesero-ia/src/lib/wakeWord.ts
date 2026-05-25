@@ -20,3 +20,50 @@ export function displayAssistantName(wakeWord: string | undefined | null): strin
 export function quoteWakeWord(wakeWord: string | undefined | null): string {
   return `«${displayAssistantName(wakeWord)}»`;
 }
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function wakeWordRegex(wakeWord: string | undefined | null, flags = "i") {
+  const w = normalizeWakeWord(wakeWord);
+  return new RegExp(`\\b${escapeRegExp(w)}\\b`, flags);
+}
+
+const WAKE_FILLER_RE =
+  /^(?:hola|oye|ey|ei|buenas|buenos\s+d[ií]as|buenas\s+tardes|disculpa|por\s+favor)\s*,?\s*/iu;
+
+/** El nombre del bot debe ir al inicio (tras un saludo opcional). */
+export function utteranceStartsWithWakeWord(utterance: string, wakeWord: string | undefined | null): boolean {
+  const w = normalizeWakeWord(wakeWord);
+  const lower = String(utterance ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFC");
+  if (!lower) return false;
+  const rest = lower.replace(WAKE_FILLER_RE, "").trim();
+  return rest === w || rest.startsWith(`${w} `) || rest.startsWith(`${w},`);
+}
+
+/** Pedido en la misma frase, tras el nombre del bot al inicio. */
+export function commandAfterWakeInUtterance(utterance: string, wakeWord: string | undefined | null): string {
+  const re = wakeWordRegex(wakeWord, "i");
+  const parts = String(utterance ?? "")
+    .trim()
+    .split(re);
+  return (parts[parts.length - 1] ?? "").trim();
+}
+
+/**
+ * Solo devuelve el pedido si la frase empieza con el nombre del bot (palabra clave).
+ * Evita activaciones por ruido, eco del altavoz o nombre al final de la frase.
+ */
+export function extractCommandIfWakeAtStart(
+  utterance: string,
+  wakeWord: string | undefined | null,
+  minCommandLen = 2,
+): string | null {
+  if (!utteranceStartsWithWakeWord(utterance, wakeWord)) return null;
+  const tail = commandAfterWakeInUtterance(utterance, wakeWord);
+  return tail.length >= minCommandLen ? tail : null;
+}

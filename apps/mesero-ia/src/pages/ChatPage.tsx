@@ -117,8 +117,6 @@ export function ChatPage() {
     [menu, orderInferenceCorpus, touchCart, pendingDraft],
   );
 
-  const wakeMode = listening && !busy && !ttsActive;
-
   const flashToast = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2800);
@@ -468,7 +466,7 @@ export function ChatPage() {
             </div>
             <div className="flex min-w-0 flex-col gap-3 md:[grid-area:categories]">
               <VoiceHintsCard assistantName={assistantName} />
-              <VoiceListeningCard assistantName={assistantName} active={wakeMode || ttsActive} />
+              <VoiceListeningCard assistantName={assistantName} active={busy || ttsActive} />
             </div>
             <div className="min-w-0 md:[grid-area:hints] md:self-stretch">
               <MenuQuickPanel

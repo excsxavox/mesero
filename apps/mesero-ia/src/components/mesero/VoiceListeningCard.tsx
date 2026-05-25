@@ -20,7 +20,7 @@ export function VoiceListeningCard({ assistantName, active }: Props) {
     <section className="flex flex-col rounded-xl border border-mesero-line/15 bg-mesero-panel/60 p-3 ring-1 ring-mesero-line/10">
       <div className="mb-2 flex items-center gap-1.5">
         <HeaderWaveIcon />
-        <h2 className="text-xs font-medium text-mesero-text">Listo para escucharte</h2>
+        <h2 className="text-xs font-medium text-mesero-text">Micrófono en espera</h2>
       </div>
 
       <div className="relative flex h-16 items-center justify-center overflow-hidden rounded-lg border border-mesero-line/10 bg-mesero-deep/40">
@@ -61,10 +61,8 @@ export function VoiceListeningCard({ assistantName, active }: Props) {
       </div>
 
       <p className="mt-2 text-center text-[11px] leading-snug text-mesero-text-muted/80">
-        Di lo que quieras, {assistantName} te entiende{" "}
-        <span className="text-mesero-accent/90" aria-hidden>
-          ♡
-        </span>
+        Empieza diciendo <span className="font-semibold text-mesero-accent/90">{assistantName}</span> y luego tu
+        pedido. Solo responde cuando escucha su nombre.
       </p>
     </section>
   );
