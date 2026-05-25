@@ -10,6 +10,7 @@ import {
   normalizeTableCount,
 } from "../../lib/tables";
 import { displayAssistantName } from "../../lib/wakeWord";
+import { MenuPdfSettingsSection } from "./MenuPdfSettingsSection";
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20";
@@ -201,6 +202,8 @@ export function SettingsPage() {
           Guardar
         </button>
       </section>
+
+      <MenuPdfSettingsSection />
 
       <section className="max-w-2xl space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 ring-1 ring-zinc-800/80">
         <h2 className="text-sm font-semibold text-zinc-200">Mesas del local</h2>

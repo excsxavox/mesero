@@ -20,7 +20,7 @@ import {
 import { fetchCommercialOfferings, isCommercialOfferingsConfigured } from "./aiboxOfferings.js";
 import { catalogSource, getResolvedCatalog, invalidateCatalogCache } from "./menuCatalog.js";
 import { getOfferingImage } from "./offeringImageStore.js";
-import { filterAmbiguousMenuLines } from "./orderAmbiguity.js";
+import { filterAmbiguousMenuLines, inferMenuLinesFromText, mergeDraftItemLists } from "./orderAmbiguity.js";
 import {
   buildConversationPhaseHint,
   buildWaiterHospitalityBlock,
@@ -71,6 +71,7 @@ function openAiApiKey() {
 }
 
 const DATA_DIR = path.join(__dirname, "..", "data");
+const MENU_PDF_DIR = path.join(DATA_DIR, "menu-pdfs");
 /** Origen legacy para migración única a SQLite (si existe y la BD está vacía). */
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 const STORE_DB = process.env.MESERO_DB_PATH || path.join(DATA_DIR, "mesero.db");
@@ -281,6 +282,32 @@ function verifyAdminExitPasswordPlain(plain, stored) {
   return crypto.timingSafeEqual(expected, derived);
 }
 
+function normalizeUiPalette(value) {
+  return value === "rustico" ? "rustico" : "moderno";
+}
+
+function menuPdfFilePath(companyId) {
+  return path.join(MENU_PDF_DIR, `${companyId}.pdf`);
+}
+
+function menuPdfConfiguredFor(companyId) {
+  if (!companyId) return false;
+  try {
+    return fs.existsSync(menuPdfFilePath(companyId));
+  } catch {
+    return false;
+  }
+}
+
+function normalizeMenuPdfUrl(value) {
+  if (typeof value !== "string") return "";
+  const t = value.trim();
+  if (!t) return "";
+  if (t.length > 2048) return t.slice(0, 2048);
+  if (!/^https?:\/\//i.test(t)) return "";
+  return t;
+}
+
 function publicSettings() {
   const ctx = getCompanyContext();
   const s = { ...store.settings };
@@ -288,7 +315,16 @@ function publicSettings() {
   delete s.assistantLanguage;
   s.wakeWord = resolveWakeWord(store.settings);
   s.tableCount = resolveTableCount(store.settings);
+  if (store.settings.uiPalette != null && store.settings.uiPalette !== "") {
+    s.uiPalette = normalizeUiPalette(store.settings.uiPalette);
+  } else {
+    delete s.uiPalette;
+  }
   s.adminExitPasswordConfigured = Boolean(store.settings.adminExitPasswordHash);
+  const pdfUrl = normalizeMenuPdfUrl(store.settings.menuPdfUrl);
+  if (pdfUrl) s.menuPdfUrl = pdfUrl;
+  else delete s.menuPdfUrl;
+  s.menuPdfConfigured = menuPdfConfiguredFor(ctx?.companyId);
   if (ctx?.companyId) s.companyId = ctx.companyId;
   if (ctx?.branchId) s.branchId = ctx.branchId;
   const tc = resolveTableCount(store.settings);
@@ -1770,6 +1806,68 @@ app.get("/api/settings", (_req, res) => {
   res.json(publicSettings());
 });
 
+app.get("/api/menu-pdf", (req, res) => {
+  const ctx = getCompanyContext();
+  if (!ctx?.companyId) {
+    res.status(400).json({ error: "Falta companyId." });
+    return;
+  }
+  const filePath = menuPdfFilePath(ctx.companyId);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: "No hay PDF de menú cargado para este local." });
+    return;
+  }
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", 'inline; filename="menu.pdf"');
+  res.sendFile(filePath);
+});
+
+const menuPdfUpload = multer({
+  storage: multer.diskStorage({
+    destination(_req, _file, cb) {
+      fs.mkdirSync(MENU_PDF_DIR, { recursive: true });
+      cb(null, MENU_PDF_DIR);
+    },
+    filename(_req, _file, cb) {
+      const companyId = getCompanyContext()?.companyId ?? "default";
+      cb(null, `${companyId}.pdf`);
+    },
+  }),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const ok =
+      file.mimetype === "application/pdf" || String(file.originalname || "").toLowerCase().endsWith(".pdf");
+    cb(ok ? null : new Error("Solo se permiten archivos PDF."), ok);
+  },
+});
+
+app.post("/api/settings/menu-pdf", menuPdfUpload.single("pdf"), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "Seleccione un archivo PDF." });
+    return;
+  }
+  saveStore();
+  broadcast("settings", publicSettings());
+  res.json(publicSettings());
+});
+
+app.delete("/api/settings/menu-pdf", (_req, res) => {
+  const ctx = getCompanyContext();
+  if (ctx?.companyId) {
+    const filePath = menuPdfFilePath(ctx.companyId);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        /* */
+      }
+    }
+  }
+  saveStore();
+  broadcast("settings", publicSettings());
+  res.json(publicSettings());
+});
+
 app.put("/api/settings", (req, res) => {
   const body = req.body && typeof req.body === "object" ? { ...req.body } : {};
   const incomingPass = body.adminExitPassword;
@@ -1778,6 +1876,7 @@ app.put("/api/settings", (req, res) => {
   delete body.adminExitPasswordHash;
   delete body.adminExitPasswordConfigured;
   delete body.adminExitPasswordClear;
+  delete body.menuPdfConfigured;
 
   if (typeof incomingPass === "string" && incomingPass.length > 0) {
     store.settings.adminExitPasswordHash = hashAdminExitPassword(incomingPass);
@@ -1795,6 +1894,18 @@ app.put("/api/settings", (req, res) => {
   if (body.kioskTable !== undefined) {
     const tc = resolveTableCount({ ...store.settings, tableCount: body.tableCount ?? store.settings.tableCount });
     body.kioskTable = normalizeSelectedTable(body.kioskTable, tc);
+  }
+  if (body.uiPalette !== undefined) {
+    body.uiPalette = normalizeUiPalette(body.uiPalette);
+  }
+  if (body.menuPdfUrl !== undefined) {
+    const url = normalizeMenuPdfUrl(body.menuPdfUrl);
+    body.menuPdfUrl = url || undefined;
+  }
+  if (body.menuPdfUrlClear === true) {
+    delete body.menuPdfUrlClear;
+    delete store.settings.menuPdfUrl;
+    delete body.menuPdfUrl;
   }
 
   store.settings = { ...store.settings, ...body };
@@ -1958,6 +2069,11 @@ app.post("/api/chat/complete", async (req, res) => {
         draftItems = [];
       }
     }
+    draftItems = mergeDraftItemLists(
+      draftItems,
+      inferMenuLinesFromText(orderCorpus, menu),
+      inferMenuLinesFromText(content, menu),
+    );
   }
 
   let order = null;

@@ -42,6 +42,7 @@ export function ChatPage() {
     setConfirmed,
     pendingDraft,
     orderDraftCorpus,
+    orderInferenceCorpus,
     clearOrder,
     clearConversation,
     sendWithText,
@@ -106,8 +107,8 @@ export function ChatPage() {
   const quickMenuCategories = useMemo(() => menuCategories.slice(0, 4), [menuCategories]);
 
   const hasActiveOrder = useMemo(
-    () => mergedActiveLines(menu, orderDraftCorpus, touchCart, pendingDraft).length > 0,
-    [menu, orderDraftCorpus, touchCart, pendingDraft],
+    () => mergedActiveLines(menu, orderInferenceCorpus, touchCart, pendingDraft).length > 0,
+    [menu, orderInferenceCorpus, touchCart, pendingDraft],
   );
 
   const wakeMode = listening && !busy && !ttsActive;
@@ -443,10 +444,10 @@ export function ChatPage() {
               />
             </div>
             <div className="flex min-w-0 flex-col gap-3 md:[grid-area:order] md:row-span-2 md:self-start">
-              <MenuQrCard compact={hasActiveOrder} />
+              <MenuQrCard compact={hasActiveOrder} settings={settings} />
               <OrderSummaryCard
                 menu={menu}
-                corpus={orderDraftCorpus}
+                corpus={orderInferenceCorpus}
                 pendingDraft={pendingDraft}
                 touchCart={touchCart}
                 confirmed={confirmed}
@@ -499,7 +500,7 @@ export function ChatPage() {
               aria-label="Enviar mensaje"
               disabled={busy || needsMandatoryPasswordSetup}
               onClick={send}
-              className="touch-manipulation flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-mesero-accent to-blue-600 px-4 text-white hover:from-blue-400 hover:to-blue-500 disabled:opacity-50"
+              className="btn-mesero-primary touch-manipulation flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
             >
               {busy ? (
                 <span className="text-lg leading-none">…</span>

@@ -7,7 +7,7 @@ type Props = {
 
 function BasketIcon() {
   return (
-    <svg className="h-5 w-5 shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg className="h-5 w-5 shrink-0 text-mesero-accent" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M6 8h15l-1.5 9H7.5L6 8ZM6 8 5 4H2"
         stroke="currentColor"
@@ -44,7 +44,7 @@ export function CatalogOrderSummary({ itemCount, total }: Props) {
         <p className="whitespace-nowrap text-xs font-medium text-mesero-text">
           Mi pedido {countLabel}
         </p>
-        <p className="text-sm font-bold text-amber-400">{totalLabel}</p>
+        <p className="text-sm font-bold text-mesero-accent">{totalLabel}</p>
       </div>
     </div>
   );

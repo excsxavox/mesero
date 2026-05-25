@@ -119,6 +119,21 @@ export async function putSettings(s: SettingsWrite) {
   );
 }
 
+export async function uploadMenuPdf(file: File) {
+  const fd = new FormData();
+  fd.append("pdf", file);
+  const r = await authFetch("/api/settings/menu-pdf", { method: "POST", body: fd });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t || r.statusText);
+  }
+  return r.json() as Promise<Settings>;
+}
+
+export async function deleteMenuPdf() {
+  return json<Settings>(await authFetch("/api/settings/menu-pdf", { method: "DELETE" }));
+}
+
 export async function chatComplete(
   messages: { role: string; content: string }[],
   options?: { selectedTable?: number | null; kitchenOrderIds?: string[] },

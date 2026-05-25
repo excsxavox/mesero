@@ -27,7 +27,7 @@ export function KarenProfileCard({
   const short = bubble.length > 220 ? `${bubble.slice(0, 217).trim()}…` : bubble;
 
   return (
-    <section className="flex shrink-0 items-start gap-3 rounded-2xl border border-mesero-line/15 bg-mesero-deep/25 p-4 ring-1 ring-mesero-line/10">
+    <section className="karen-profile-panel flex shrink-0 items-start gap-3 rounded-2xl border border-mesero-line/15 bg-mesero-deep/25 p-4 ring-1 ring-mesero-line/10">
       <div className="relative shrink-0" aria-hidden>
         <div className="relative h-[4.25rem] w-[4.25rem] overflow-hidden rounded-full bg-mesero-muted ring-2 ring-mesero-accent/40">
           <img
@@ -44,7 +44,7 @@ export function KarenProfileCard({
             }}
           />
         </div>
-        <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#14121c] bg-emerald-400" />
+        <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-mesero-bg bg-mesero-active" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">

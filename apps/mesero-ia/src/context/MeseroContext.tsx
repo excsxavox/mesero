@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { Outlet, useSearchParams } from "react-router-dom";
+import { MeseroThemeSync } from "../components/MeseroThemeSync";
 import { KioskFullscreenGuard } from "../components/mesero/KioskFullscreenGuard";
 import { preloadSpeechVoices, speakTextAsync, stopSpeaking } from "../hooks/useVoiceDictation";
 import { useStableRecognitionLang } from "../hooks/useStableRecognitionLang";
@@ -23,6 +24,7 @@ import {
 } from "../lib/meseroSessionStorage";
 import { speechLocaleFromConversation } from "../lib/speechLocale";
 import type { ConfirmedBundle, DraftLineInput } from "../lib/orderDisplayLines";
+import { buildOrderInferenceCorpus, mergeDraftInputs } from "../lib/orderDisplayLines";
 import type { Settings } from "../lib/types";
 import { applyKioskTableFromUrl } from "../lib/kioskTable";
 import { clampSelectedTable, formatTableLabel, normalizeTableCount } from "../lib/tables";
@@ -52,6 +54,8 @@ type MeseroContextValue = {
   pendingDraft: DraftLineInput[];
   /** Texto del cliente desde el último pedido confirmado (evita arrastrar platos viejos). */
   orderDraftCorpus: string;
+  /** Cliente + resumen del mesero para inferir líneas en pantalla. */
+  orderInferenceCorpus: string;
   clearOrder: () => void;
   clearConversation: () => void;
   sendWithText: (raw: string) => Promise<void>;
@@ -127,6 +131,14 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
       : users;
     return scoped.map((m) => m.content).join(" ");
   }, [messages, draftEpochMs]);
+
+  const orderInferenceCorpus = useMemo(() => {
+    const assist = messages
+      .filter((m) => m.role === "assistant")
+      .slice(-3)
+      .map((m) => m.content);
+    return buildOrderInferenceCorpus(orderDraftCorpus, assist);
+  }, [messages, orderDraftCorpus]);
 
   const tableCount = useMemo(
     () => normalizeTableCount(settings?.tableCount),
@@ -271,13 +283,12 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         setMessages((m) => [...m, { role: "assistant", content: res.content, at: new Date().toISOString() }]);
         playAssistantVoice(res.content, next);
         if (Array.isArray(res.draftItems) && res.draftItems.length > 0) {
-          setPendingDraft(
-            res.draftItems.map((it) => ({
-              menuItemId: it.menuItemId,
-              name: it.name,
-              qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
-            })),
-          );
+          const incoming = res.draftItems.map((it) => ({
+            menuItemId: it.menuItemId,
+            name: it.name,
+            qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
+          }));
+          setPendingDraft((prev) => mergeDraftInputs(prev, incoming));
           setTouchCart({});
         }
         if (res.paymentFlow?.phase === "ready") {
@@ -343,6 +354,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     setConfirmed,
     pendingDraft,
     orderDraftCorpus,
+    orderInferenceCorpus,
     clearOrder,
     clearConversation,
     sendWithText,
@@ -361,6 +373,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
 
   return (
     <MeseroContext.Provider value={value}>
+      <MeseroThemeSync />
       <KioskFullscreenGuard />
       {children ?? <Outlet />}
     </MeseroContext.Provider>

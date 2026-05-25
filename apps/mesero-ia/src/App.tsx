@@ -12,6 +12,7 @@ import { AdminHome } from "./pages/admin/AdminHome";
 import { FlowPage } from "./pages/admin/FlowPage";
 import { SettingsPage } from "./pages/admin/SettingsPage";
 import { ExecutionModePage } from "./pages/admin/ExecutionModePage";
+import { ThemePage } from "./pages/admin/ThemePage";
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
                 <Route index element={<AdminHome />} />
                 <Route path="flujo" element={<FlowPage />} />
                 <Route path="config" element={<SettingsPage />} />
+                <Route path="tema" element={<ThemePage />} />
                 <Route path="ejecucion" element={<ExecutionModePage />} />
               </Route>
             </Route>

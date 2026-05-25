@@ -28,6 +28,30 @@ export function draftLinesFromCorpus(corpus: string, menu: MenuItem[]) {
 
 export type DraftLineInput = { menuItemId: string; name: string; qty: number };
 
+export function mergeDraftInputs(
+  prev: DraftLineInput[] | undefined,
+  incoming: DraftLineInput[] | undefined,
+): DraftLineInput[] {
+  const map = new Map<string, DraftLineInput>();
+  for (const it of prev ?? []) map.set(it.menuItemId, it);
+  for (const it of incoming ?? []) {
+    map.set(it.menuItemId, {
+      menuItemId: it.menuItemId,
+      name: it.name,
+      qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
+    });
+  }
+  return [...map.values()];
+}
+
+/** Texto para inferir platos: lo que dijo el cliente + resumen reciente del mesero. */
+export function buildOrderInferenceCorpus(userCorpus: string, assistantTexts: string[]): string {
+  const assist = assistantTexts
+    .map((s) => String(s ?? "").replace(/<<<[\s\S]*?>>>/g, " "))
+    .join(" ");
+  return `${userCorpus} ${assist}`.replace(/\s+/g, " ").trim();
+}
+
 function linesFromDraftInput(menu: MenuItem[], draft: DraftLineInput[] | undefined) {
   if (!draft?.length) return [] as DisplayLine[];
   const out: DisplayLine[] = [];

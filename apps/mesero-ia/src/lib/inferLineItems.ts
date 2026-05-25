@@ -120,10 +120,33 @@ function fullNameMatch(nm: string, hay: string): { ok: boolean; idx: number } {
 
 function userExplicitlyOrdersSide(word: string, hay: string): boolean {
   const w = word.replace(/s$/, "");
+  if (new RegExp(`\\b(un|una|porci[oó]n\\s+de)\\s+[^.]{0,40}\\b(${word}|${w})\\b`, "i").test(hay)) {
+    return true;
+  }
   return new RegExp(
     `\\b(quiero|dame|traeme|ponme|pedir|pido|ordenar|necesito|me das|un|una|dos|tres|\\d+)\\s+(el\\s+)?(${word}|${w})\\b`,
     "i",
   ).test(hay);
+}
+
+function productSizeHints(name: string): { kind: "ml" | "l"; value: string }[] {
+  const nm = fold(name);
+  const out: { kind: "ml" | "l"; value: string }[] = [];
+  const ml = nm.match(/\b(\d+(?:[.,]\d+)?)\s*ml\b/);
+  if (ml) out.push({ kind: "ml", value: ml[1]!.replace(",", ".") });
+  const lit = nm.match(/\b(\d+(?:[.,]\d+)?)\s*litros?\b/);
+  if (lit) out.push({ kind: "l", value: lit[1]!.replace(",", ".") });
+  return out;
+}
+
+function sizeHintsMatchProduct(name: string, hay: string): boolean {
+  const hints = productSizeHints(name);
+  if (hints.length === 0) return false;
+  return hints.every((h) => {
+    const v = h.value.replace(".", "[.,]");
+    if (h.kind === "ml") return new RegExp(`\\b${v}\\s*ml\\b`, "i").test(hay);
+    return new RegExp(`\\b${v}\\s*(?:litros?|l)\\b`, "i").test(hay);
+  });
 }
 
 function scoreMenuItem(m: MenuItem, hay: string): { score: number; qty: number } {
@@ -192,6 +215,14 @@ function resolvePartialAmbiguity(ranked: RankedLine[], menu: MenuItem[], hay: st
       out.push(group[0]!);
       continue;
     }
+    const sizePicks = group.filter((it) => {
+      const m = menu.find((x) => x.id === it.menuItemId);
+      return m && sizeHintsMatchProduct(m.name, hay);
+    });
+    if (sizePicks.length === 1) {
+      out.push(sizePicks[0]!);
+      continue;
+    }
     const picks = group.filter((it) => {
       const m = menu.find((x) => x.id === it.menuItemId)!;
       const tokens = significantTokens(m.name);
@@ -209,7 +240,7 @@ function resolvePartialAmbiguity(ranked: RankedLine[], menu: MenuItem[], hay: st
 }
 
 /**
- * Detecta artículos del catálogo en texto del **cliente** (no del asistente).
+ * Detecta artículos del catálogo en texto del cliente o del resumen del mesero.
  * Si hay varias variantes del mismo producto (ej. varias Coca-Colas), no agrega todas:
  * solo una cuando el cliente ya especificó sabor/tamaño; si no, ninguna (Karen debe preguntar).
  */

@@ -4,9 +4,25 @@ import "./index.css";
 import App from "./App.tsx";
 import { AuthProvider } from "./context/AuthContext.tsx";
 import { PanelThemeProvider } from "./context/PanelThemeContext.tsx";
-import { applyMeseroTheme, getStoredMeseroTheme } from "./lib/meseroTheme.ts";
+import {
+  applyMeseroAppearance,
+  applyMeseroPalette,
+  getPaletteFromSettings,
+  getStoredMeseroPalette,
+  getStoredMeseroTheme,
+} from "./lib/meseroTheme.ts";
 
-applyMeseroTheme(getStoredMeseroTheme());
+applyMeseroAppearance(getStoredMeseroTheme(), getStoredMeseroPalette());
+
+void fetch("/api/settings")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((s) => {
+    const p = getPaletteFromSettings(s);
+    if (p) applyMeseroPalette(p);
+  })
+  .catch(() => {
+    /* */
+  });
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

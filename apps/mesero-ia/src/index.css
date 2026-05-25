@@ -11,6 +11,13 @@
   --theme-line: #5b7fd6;
   --theme-accent: #5b8dee;
   --theme-accent-strong: #4a7ad4;
+  --theme-active: #5b8dee;
+  --theme-active-strong: #4a7ad4;
+  --theme-danger: #991b1b;
+  --theme-danger-strong: #b91c1c;
+  --theme-badge: #b45309;
+  --theme-cream: #1a2238;
+  --theme-cream-muted: #222c46;
   --theme-text: #e8eef4;
   --theme-text-muted: #9eb0d4;
   --theme-body-gradient: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(59, 90, 150, 0.28) 0%, transparent 50%),
@@ -27,11 +34,63 @@
   --theme-line: #4a6bb5;
   --theme-accent: #3d6fd4;
   --theme-accent-strong: #2f5cb8;
+  --theme-active: #3d6fd4;
+  --theme-active-strong: #2f5cb8;
+  --theme-danger: #dc2626;
+  --theme-danger-strong: #b91c1c;
+  --theme-badge: #d97706;
+  --theme-cream: #ffffff;
+  --theme-cream-muted: #eef1f8;
   --theme-text: #1a2238;
   --theme-text-muted: #5a6b8a;
   --theme-body-gradient: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(91, 127, 214, 0.12) 0%, transparent 50%),
     linear-gradient(165deg, rgb(244, 246, 251) 0%, #eef1f8 48%, #e8ecf4 100%);
   --theme-shadow: rgba(26, 34, 56, 0.08);
+}
+
+/* Rústico premium: carbón cálido + dorado + oliva + burdeos (referencia UI pedido) */
+[data-mesero-palette="rustico"][data-mesero-theme="dark"] {
+  --theme-bg: #121110;
+  --theme-deep: #0d0c0b;
+  --theme-panel: #1c1917;
+  --theme-elevated: #161412;
+  --theme-muted: #332d29;
+  --theme-line: #332d29;
+  --theme-accent: #d4a373;
+  --theme-accent-strong: #e6b566;
+  --theme-active: #3f4f2e;
+  --theme-active-strong: #4a5f38;
+  --theme-danger: #522b2b;
+  --theme-danger-strong: #633535;
+  --theme-badge: #78350f;
+  --theme-cream: #252220;
+  --theme-cream-muted: #1c1917;
+  --theme-text: #fafaf9;
+  --theme-text-muted: #a8a29e;
+  --theme-body-gradient: linear-gradient(180deg, #121110 0%, #0d0c0b 100%);
+  --theme-shadow: rgba(0, 0, 0, 0.55);
+}
+
+[data-mesero-palette="rustico"][data-mesero-theme="light"] {
+  --theme-bg: #f5f5f4;
+  --theme-deep: #e7e5e4;
+  --theme-panel: #ffffff;
+  --theme-elevated: #fafaf9;
+  --theme-muted: #d6d3d1;
+  --theme-line: #a8a29e;
+  --theme-accent: #b8863f;
+  --theme-accent-strong: #d4a373;
+  --theme-active: #3f4f2e;
+  --theme-active-strong: #556b2f;
+  --theme-danger: #7f1d1d;
+  --theme-danger-strong: #991b1b;
+  --theme-badge: #92400e;
+  --theme-cream: #fffbeb;
+  --theme-cream-muted: #fef3c7;
+  --theme-text: #1c1917;
+  --theme-text-muted: #78716c;
+  --theme-body-gradient: linear-gradient(180deg, #f5f5f4 0%, #e7e5e4 100%);
+  --theme-shadow: rgba(28, 25, 23, 0.1);
 }
 
 @theme {
@@ -43,6 +102,13 @@
   --color-mesero-line: var(--theme-line);
   --color-mesero-accent: var(--theme-accent);
   --color-mesero-accent-strong: var(--theme-accent-strong);
+  --color-mesero-active: var(--theme-active);
+  --color-mesero-active-strong: var(--theme-active-strong);
+  --color-mesero-danger: var(--theme-danger);
+  --color-mesero-danger-strong: var(--theme-danger-strong);
+  --color-mesero-badge: var(--theme-badge);
+  --color-mesero-cream: var(--theme-cream);
+  --color-mesero-cream-muted: var(--theme-cream-muted);
   --color-mesero-text: var(--theme-text);
   --color-mesero-text-muted: var(--theme-text-muted);
 }
@@ -55,8 +121,48 @@ body,
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
   background: var(--theme-body-gradient);
   color: var(--theme-text);
   transition: background 0.25s ease, color 0.2s ease;
+}
+
+[data-mesero-palette="rustico"] .voice-orb-panel {
+  background: var(--theme-panel);
+  border-color: var(--theme-muted);
+  box-shadow: 0 8px 24px var(--theme-shadow);
+}
+
+[data-mesero-palette="rustico"] .karen-profile-panel {
+  border-color: var(--theme-muted);
+  background: var(--theme-panel);
+}
+
+[data-mesero-palette="rustico"] .order-summary-panel {
+  border-color: var(--theme-muted);
+  background: var(--theme-panel);
+}
+
+.btn-mesero-primary {
+  background: var(--theme-active);
+  color: #fff;
+}
+.btn-mesero-primary:hover:not(:disabled) {
+  background: var(--theme-active-strong);
+}
+.btn-mesero-primary:disabled {
+  opacity: 0.5;
+}
+
+.btn-mesero-danger {
+  background: var(--theme-danger);
+  color: #fff;
+}
+.btn-mesero-danger:hover:not(:disabled) {
+  background: var(--theme-danger-strong);
+}
+
+.badge-mesero-table {
+  background: var(--theme-badge);
+  color: #fff;
 }

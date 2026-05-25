@@ -24,6 +24,15 @@ export function AdminHome() {
           <div className="mt-1 text-sm text-zinc-500">Nombre del local e instrucciones extra del sistema.</div>
         </Link>
         <Link
+          to="/admin/tema"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 ring-1 ring-zinc-800 hover:border-amber-500/40"
+        >
+          <div className="font-medium text-zinc-100">Tema</div>
+          <div className="mt-1 text-sm text-zinc-500">
+            Paleta moderna o rústica tradicional para quiosco y cocina.
+          </div>
+        </Link>
+        <Link
           to="/admin/ejecucion"
           className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 ring-1 ring-zinc-800 hover:border-amber-500/40"
         >

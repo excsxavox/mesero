@@ -32,7 +32,7 @@ export function KarenVoiceHero({ assistantName, busy, ttsActive, listening, supp
 
         <div className="relative">
           <div
-            className={`absolute -inset-1 rounded-full bg-gradient-to-br from-mesero-accent via-blue-500 to-mesero-accent-strong transition-opacity duration-300 ${
+            className={`absolute -inset-1 rounded-full bg-gradient-to-br from-mesero-accent via-mesero-line to-mesero-accent-strong transition-opacity duration-300 ${
               active ? "opacity-100 blur-[1px]" : "opacity-55"
             }`}
             aria-hidden

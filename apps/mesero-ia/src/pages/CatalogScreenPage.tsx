@@ -99,11 +99,11 @@ function ProductCard({
           <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-mesero-text-muted">{item.description}</p>
         ) : null}
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-          <span className="text-sm font-bold text-amber-400/95">{formatPrice(item.price)}</span>
+          <span className="text-sm font-bold text-mesero-accent">{formatPrice(item.price)}</span>
           <button
             type="button"
             onClick={onAdd}
-            className="touch-manipulation rounded-lg bg-gradient-to-r from-mesero-accent to-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:from-blue-400 hover:to-blue-500"
+            className="btn-mesero-primary touch-manipulation rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
           >
             + Añadir
           </button>
@@ -130,6 +130,7 @@ export function CatalogScreenPage() {
     assistantName,
     wakeWord,
     orderDraftCorpus,
+    orderInferenceCorpus,
     pendingDraft,
   } = useMesero();
   const { theme, toggleTheme } = useMeseroTheme();
@@ -163,8 +164,8 @@ export function CatalogScreenPage() {
   }, [blocks, activeCat, q]);
 
   const orderLines = useMemo(
-    () => mergedActiveLines(menu, orderDraftCorpus, touchCart, pendingDraft),
-    [menu, orderDraftCorpus, touchCart, pendingDraft],
+    () => mergedActiveLines(menu, orderInferenceCorpus, touchCart, pendingDraft),
+    [menu, orderInferenceCorpus, touchCart, pendingDraft],
   );
   const total = orderTotal(orderLines);
   const orderItemCount = useMemo(() => orderLines.reduce((n, l) => n + l.qty, 0), [orderLines]);
@@ -194,12 +195,12 @@ export function CatalogScreenPage() {
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="touch-manipulation mb-3 text-xs font-medium text-mesero-accent hover:text-blue-200"
+            className="touch-manipulation mb-3 text-xs font-medium text-mesero-accent hover:text-mesero-accent-strong"
           >
             ← Volver al mesero
           </button>
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-mesero-accent to-blue-600 text-base">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-mesero-active text-base">
               🍔
             </span>
             <div className="min-w-0 flex-1">
@@ -227,8 +228,8 @@ export function CatalogScreenPage() {
             onClick={() => selectCategory("todos")}
             className={`mb-1 flex w-full touch-manipulation items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${
               !activeCat || activeCat === "todos"
-                ? "bg-mesero-accent-strong/35 font-semibold text-mesero-text ring-1 ring-mesero-accent/30"
-                : "text-blue-200/80 hover:bg-mesero-panel/50"
+                ? "bg-mesero-active/25 font-semibold text-mesero-text ring-1 ring-mesero-active/40"
+                : "text-mesero-text-muted hover:bg-mesero-panel/50"
             }`}
           >
             <span aria-hidden>📋</span>
@@ -245,8 +246,8 @@ export function CatalogScreenPage() {
                   onClick={() => selectCategory(cat)}
                   className={`mb-1 flex w-full touch-manipulation items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${
                     activeCat === cat
-                      ? "bg-mesero-accent-strong/35 font-semibold text-mesero-text ring-1 ring-mesero-accent/30"
-                      : "text-blue-200/80 hover:bg-mesero-panel/50"
+                      ? "bg-mesero-active/25 font-semibold text-mesero-text ring-1 ring-mesero-active/40"
+                      : "text-mesero-text-muted hover:bg-mesero-panel/50"
                   }`}
                 >
                   <span aria-hidden>{categoryIcon(cat)}</span>
@@ -264,19 +265,19 @@ export function CatalogScreenPage() {
               {orderLines.map((l) => (
                 <li key={l.menuItemId} className="flex justify-between gap-1">
                   <span className="truncate">
-                    {l.name} <span className="text-amber-400/90">×{l.qty}</span>
+                    {l.name} <span className="text-mesero-accent">×{l.qty}</span>
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="mt-2 text-sm font-bold text-amber-400/95">
+          <p className="mt-2 text-sm font-bold text-mesero-accent">
             {total != null ? formatMoney(total) : "—"}
           </p>
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="touch-manipulation mt-3 w-full rounded-xl bg-mesero-accent-strong/30 py-2 text-xs font-semibold text-mesero-text ring-1 ring-mesero-line/30 hover:bg-mesero-accent-strong/45"
+            className="btn-mesero-primary touch-manipulation mt-3 w-full rounded-xl py-2 text-xs font-semibold"
           >
             Volver y pedir con {assistantName}
           </button>

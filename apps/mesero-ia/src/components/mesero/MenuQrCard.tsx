@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getMenuPublicUrl } from "../../lib/menuPublicUrl";
+import type { Settings } from "../../lib/types";
 
 const QR_SIZE_FULL = 148;
 
 type Props = {
   /** Cuando hay artículos en el pedido en curso, solo se muestra el botón para abrir el QR en modal. */
   compact?: boolean;
+  settings?: Pick<Settings, "menuPdfConfigured" | "menuPdfUrl" | "companyId"> | null;
 };
 
 function useMenuQrDataUrl(publicUrl: string | null, size: number) {
@@ -64,7 +66,17 @@ function QrImage({ dataUrl, error, size }: { dataUrl: string | null; error: stri
   );
 }
 
-function MenuQrModal({ open, onClose, publicUrl }: { open: boolean; onClose: () => void; publicUrl: string | null }) {
+function MenuQrModal({
+  open,
+  onClose,
+  publicUrl,
+  hint,
+}: {
+  open: boolean;
+  onClose: () => void;
+  publicUrl: string | null;
+  hint: string;
+}) {
   const { qrDataUrl, qrError } = useMenuQrDataUrl(publicUrl, QR_SIZE_FULL);
 
   useEffect(() => {
@@ -92,10 +104,10 @@ function MenuQrModal({ open, onClose, publicUrl }: { open: boolean; onClose: () 
       >
         <header className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 id="menu-qr-modal-title" className="text-sm font-semibold uppercase tracking-wide text-blue-200/90">
+            <h2 id="menu-qr-modal-title" className="text-sm font-semibold uppercase tracking-wide text-mesero-accent">
               Menú
             </h2>
-            <p className="mt-1 text-[11px] leading-snug text-mesero-text-muted">Escanea para ver la carta en tu móvil</p>
+            <p className="mt-1 text-[11px] leading-snug text-mesero-text-muted">{hint}</p>
           </div>
           <button
             type="button"
@@ -114,8 +126,10 @@ function MenuQrModal({ open, onClose, publicUrl }: { open: boolean; onClose: () 
   );
 }
 
-export function MenuQrCard({ compact = false }: Props) {
-  const publicUrl = useMemo(() => getMenuPublicUrl(), []);
+export function MenuQrCard({ compact = false, settings = null }: Props) {
+  const publicUrl = useMemo(() => getMenuPublicUrl({ settings }), [settings]);
+  const usesPdf = Boolean(settings?.menuPdfUrl?.trim() || settings?.menuPdfConfigured);
+  const hint = usesPdf ? "Escanea para abrir la carta en PDF" : "Escanea para ver la carta en tu móvil";
   const [modalOpen, setModalOpen] = useState(false);
   const { qrDataUrl, qrError } = useMenuQrDataUrl(publicUrl, QR_SIZE_FULL);
 
@@ -127,16 +141,16 @@ export function MenuQrCard({ compact = false }: Props) {
       <>
         <section className="rounded-2xl border border-mesero-line/15 bg-mesero-panel/90 px-3 py-2.5 ring-1 ring-mesero-line/10">
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-mesero-text-muted">Menú</h2>
-          <p className="mt-0.5 text-[10px] leading-snug text-mesero-text-muted/80">Escanear carta en el móvil</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-mesero-text-muted/80">{usesPdf ? "PDF en móvil" : "Escanear carta en el móvil"}</p>
           <button
             type="button"
             onClick={openModal}
-            className="mt-2 w-full touch-manipulation rounded-lg border border-mesero-line/30 bg-mesero-panel/40 px-3 py-2 text-[11px] font-medium text-blue-200/95 ring-1 ring-mesero-line/20 hover:bg-mesero-panel/50"
+            className="mt-2 w-full touch-manipulation rounded-lg border border-mesero-line/30 bg-mesero-panel/40 px-3 py-2 text-[11px] font-medium text-mesero-accent ring-1 ring-mesero-line/20 hover:bg-mesero-panel/50"
           >
             Mostrar QR
           </button>
         </section>
-        <MenuQrModal open={modalOpen} onClose={closeModal} publicUrl={publicUrl} />
+        <MenuQrModal open={modalOpen} onClose={closeModal} publicUrl={publicUrl} hint={hint} />
       </>
     );
   }
@@ -144,9 +158,7 @@ export function MenuQrCard({ compact = false }: Props) {
   return (
     <section className="flex flex-col items-center rounded-2xl border border-mesero-line/15 bg-mesero-panel/90 p-4 ring-1 ring-mesero-line/10">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-mesero-text-muted">Menú</h2>
-      <p className="mt-1 text-center text-[11px] leading-snug text-mesero-text-muted">
-        Escanea para ver la carta en tu móvil
-      </p>
+      <p className="mt-1 text-center text-[11px] leading-snug text-mesero-text-muted">{hint}</p>
       <div className="mt-3">
         <QrImage dataUrl={qrDataUrl} error={qrError} size={QR_SIZE_FULL} />
       </div>

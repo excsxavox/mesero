@@ -33,6 +33,8 @@ export type FlowState = {
   edges: unknown[];
 };
 
+export type MeseroPaletteId = "moderno" | "rustico";
+
 export type Settings = {
   restaurantName: string;
   assistantExtraInstructions: string;
@@ -42,6 +44,12 @@ export type Settings = {
   tableCount: number;
   /** Mesa asignada a este quiosco (admin); fallback si no hay selección en el dispositivo. */
   kioskTable?: number | null;
+  /** Paleta de colores para mesero y receptor (`moderno` | `rustico`). */
+  uiPalette?: MeseroPaletteId;
+  /** URL externa del PDF del menú (el QR apunta aquí si está definida). */
+  menuPdfUrl?: string;
+  /** Solo lectura (GET): indica si hay un PDF subido en el servidor. */
+  menuPdfConfigured?: boolean;
   /** Solo lectura (GET): indica si ya hay contraseña del candado guardada en el servidor. */
   adminExitPasswordConfigured?: boolean;
 };
@@ -52,4 +60,6 @@ export type SettingsWrite = Partial<Settings> & {
   adminExitPassword?: string;
   /** Si es true, elimina la contraseña del candado. */
   adminExitPasswordClear?: boolean;
+  /** Si es true, elimina la URL externa del PDF del menú. */
+  menuPdfUrlClear?: boolean;
 };

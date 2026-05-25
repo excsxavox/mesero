@@ -60,10 +60,10 @@ function OrderLinesList({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
-              <p className="text-xs font-semibold text-amber-400">×{it.qty}</p>
+              <p className="text-xs font-semibold text-mesero-accent">×{it.qty}</p>
             </div>
             {sub != null ? (
-              <span className="shrink-0 text-sm tabular-nums text-blue-200/85">{formatMoney(sub)}</span>
+              <span className="shrink-0 text-sm tabular-nums text-mesero-text-muted">{formatMoney(sub)}</span>
             ) : null}
           </li>
         );
@@ -101,7 +101,7 @@ export function OrderSummaryCard({
   const showDraftSection = lines.length > 0 || busy || (pendingDraft?.length ?? 0) > 0;
 
   return (
-    <section className="flex flex-col rounded-2xl border border-mesero-line/15 bg-mesero-panel/90 p-4 ring-1 ring-mesero-line/10">
+    <section className="order-summary-panel flex flex-col rounded-2xl border border-mesero-muted bg-mesero-panel p-4">
       <div className="flex items-center gap-2">
         <BagIcon />
         <h2 className="text-xs font-semibold uppercase tracking-wide text-mesero-text-muted">Pedido en curso</h2>
@@ -109,7 +109,7 @@ export function OrderSummaryCard({
 
       {showDraftSection ? (
         <div className="mt-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-amber-400/90">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-mesero-text-muted">
             Por confirmar
           </p>
           {lines.length > 0 ? (
@@ -120,7 +120,7 @@ export function OrderSummaryCard({
                 <li key={it.menuItemId} className="flex items-center gap-2.5">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
-                    <p className="text-xs font-semibold text-amber-400">×{it.qty}</p>
+                    <p className="text-xs font-semibold text-mesero-accent">×{it.qty}</p>
                   </div>
                 </li>
               ))}
@@ -132,8 +132,8 @@ export function OrderSummaryCard({
           )}
           {total != null && lines.length > 0 ? (
             <div className="mt-3 text-center">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-mesero-accent/65">Total estimado</p>
-              <p className="mt-0.5 text-2xl font-bold tabular-nums text-amber-400">{formatMoney(total)}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-mesero-text-muted">Total estimado</p>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums text-mesero-accent">{formatMoney(total)}</p>
             </div>
           ) : null}
         </div>
@@ -176,7 +176,7 @@ export function OrderSummaryCard({
       <button
         type="button"
         onClick={() => setDetailsOpen((v) => !v)}
-        className="touch-manipulation mt-4 w-full min-h-11 rounded-xl border border-mesero-line/25 bg-mesero-panel/50 py-2.5 text-sm font-medium text-mesero-text hover:bg-mesero-panel/40"
+        className="btn-mesero-primary touch-manipulation mt-4 w-full min-h-11 rounded-xl py-2.5 text-sm font-semibold"
       >
         {detailsOpen ? "Ocultar detalles" : "Ver detalles del pedido"}
       </button>
@@ -184,9 +184,9 @@ export function OrderSummaryCard({
         <button
           type="button"
           onClick={onClearOrder}
-          className="touch-manipulation mx-auto mt-1.5 block px-1 py-0.5 text-[11px] font-medium text-red-400/75 underline-offset-2 hover:text-red-300 hover:underline"
+          className="btn-mesero-danger touch-manipulation mt-2 w-full min-h-11 rounded-xl py-2.5 text-sm font-semibold"
         >
-          Limpiar orden
+          Cancelar pedido
         </button>
       ) : null}
 
@@ -195,15 +195,15 @@ export function OrderSummaryCard({
           {confirmed.length > 0 ? (
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <span className="font-semibold text-emerald-400/90">Historial en cocina</span>
+                <span className="font-semibold text-mesero-active">Historial en cocina</span>
                 {onClearConfirmed ? (
-                  <button type="button" onClick={onClearConfirmed} className="text-mesero-accent hover:text-blue-200">
+                  <button type="button" onClick={onClearConfirmed} className="text-mesero-accent hover:text-mesero-accent-strong">
                     Limpiar
                   </button>
                 ) : null}
               </div>
               {confirmed.map((b) => (
-                <div key={b.id} className="mb-2 rounded-lg bg-emerald-950/20 px-2 py-1.5 ring-1 ring-emerald-900/30">
+                <div key={b.id} className="mb-2 rounded-lg bg-mesero-deep px-2 py-1.5 ring-1 ring-mesero-muted">
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
                     <span className="text-[10px] tabular-nums text-mesero-text-muted/70">#{b.id.slice(-6)}</span>
                     <span

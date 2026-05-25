@@ -131,6 +131,38 @@ function resolveAmbiguousGroups(lines, menu, hay) {
   return out;
 }
 
+/** Detecta platos mencionados en texto (resumen del mesero o cliente). */
+export function inferMenuLinesFromText(text, menu) {
+  const hay = expandedHay(text);
+  if (!hay) return [];
+
+  const lines = [];
+  for (const m of menu) {
+    if (m.available === false) continue;
+    if (lineMatchesUserText(m, hay)) {
+      lines.push({ menuItemId: m.id, name: m.name, qty: 1 });
+    }
+  }
+  return filterAmbiguousMenuLines(lines, menu, hay, { mode: "draft" });
+}
+
+/** Une listas de borrador por menuItemId (último gana en qty/nombre). */
+export function mergeDraftItemLists(...lists) {
+  const map = new Map();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const line of list) {
+      if (!line?.menuItemId) continue;
+      map.set(line.menuItemId, {
+        menuItemId: line.menuItemId,
+        name: line.name || line.menuItemId,
+        qty: Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1)),
+      });
+    }
+  }
+  return [...map.values()];
+}
+
 /**
  * Filtra variantes ambiguas (ej. varias Coca-Colas). Para DRAFT en pantalla confía en un solo ítem;
  * para ORDER valida también contra lo que dijo el cliente.

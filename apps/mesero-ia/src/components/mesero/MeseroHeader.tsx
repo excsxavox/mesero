@@ -19,7 +19,7 @@ type Props = {
 
 function IconBurger() {
   return (
-    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-mesero-accent to-blue-600 text-lg shadow-lg shadow-mesero-deep/40">
+    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-mesero-accent to-mesero-accent-strong text-lg shadow-lg shadow-mesero-deep/40">
       🍔
     </span>
   );
@@ -97,7 +97,7 @@ export function MeseroHeader({
           <p className="text-xs text-mesero-text-muted">
             {tableLabel ? (
               <>
-                <span className="font-medium text-amber-300/95">{tableLabel}</span>
+                <span className="badge-mesero-table mr-1 inline-block rounded-md px-2 py-0.5 text-xs font-semibold">{tableLabel}</span>
                 {lockArmed ? " · candado activo" : " · asistente de voz"}
               </>
             ) : lockArmed ? (
