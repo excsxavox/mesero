@@ -8,6 +8,13 @@ function fold(s: string) {
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
+function expandedHay(corpus: string): string {
+  return fold(corpus)
+    .replace(/\s+/g, " ")
+    .replace(/\bcocacola\b/g, "coca cola")
+    .trim();
+}
+
 const SPANISH_QTY: Record<string, number> = {
   un: 1,
   una: 1,
@@ -41,7 +48,6 @@ const STOP_WORDS = new Set([
   "por",
 ]);
 
-/** Guarniciones sueltas: no matchear solo por aparecer en una frase larga del cliente. */
 const SIDE_INGREDIENT_WORDS = new Set([
   "maduro",
   "maduros",
@@ -86,6 +92,17 @@ function tokenBoundaryRegex(token: string) {
   return new RegExp(`(?:^|[\\s,])${esc}(?:$|[\\s,])`, "i");
 }
 
+function tokenInHay(hay: string, token: string): boolean {
+  return tokenBoundaryRegex(token).test(` ${hay} `);
+}
+
+function matchedTokenSignature(itemName: string, hay: string): string {
+  return significantTokens(itemName)
+    .filter((t) => tokenInHay(hay, t))
+    .sort()
+    .join("|");
+}
+
 function fullNameMatch(nm: string, hay: string): { ok: boolean; idx: number } {
   let pos = 0;
   while (pos < hay.length) {
@@ -123,8 +140,19 @@ function scoreMenuItem(m: MenuItem, hay: string): { score: number; qty: number }
     return { score: 0, qty: 1 };
   }
 
-  const matched = tokens.filter((t) => tokenBoundaryRegex(t).test(` ${hay} `));
+  const matched = tokens.filter((t) => tokenInHay(hay, t));
   if (matched.length === 0) return { score: 0, qty: 1 };
+
+  if (
+    (tokens.length >= 2 && matched.length === tokens.length) ||
+    (tokens.length >= 3 && matched.length >= Math.ceil(tokens.length * 0.75))
+  ) {
+    const firstIdx = matched
+      .map((t) => hay.search(tokenBoundaryRegex(t)))
+      .filter((i) => i >= 0)
+      .sort((a, b) => a - b)[0];
+    return { score: 1000, qty: firstIdx != null && firstIdx >= 0 ? qtyBeforeIndex(hay, firstIdx) : 1 };
+  }
 
   const cat = fold(m.category ?? "");
   let score = matched.length * 120;
@@ -142,34 +170,70 @@ function scoreMenuItem(m: MenuItem, hay: string): { score: number; qty: number }
   return { score, qty };
 }
 
+type RankedLine = { menuItemId: string; name: string; qty: number; score: number };
+
+function resolvePartialAmbiguity(ranked: RankedLine[], menu: MenuItem[], hay: string): RankedLine[] {
+  const partial = ranked.filter((it) => it.score < 1000);
+  const groups = new Map<string, RankedLine[]>();
+
+  for (const it of partial) {
+    const m = menu.find((x) => x.id === it.menuItemId);
+    if (!m) continue;
+    const sig = matchedTokenSignature(m.name, hay);
+    if (!sig) continue;
+    const g = groups.get(sig) ?? [];
+    g.push(it);
+    groups.set(sig, g);
+  }
+
+  const out: RankedLine[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      out.push(group[0]!);
+      continue;
+    }
+    const picks = group.filter((it) => {
+      const m = menu.find((x) => x.id === it.menuItemId)!;
+      const tokens = significantTokens(m.name);
+      const matched = tokens.filter((t) => tokenInHay(hay, t));
+      const exclusive = matched.filter((t) =>
+        group.every((other) => other.menuItemId === it.menuItemId || !significantTokens(
+          menu.find((x) => x.id === other.menuItemId)?.name ?? "",
+        ).includes(t)),
+      );
+      return exclusive.length > 0;
+    });
+    if (picks.length === 1) out.push(picks[0]!);
+  }
+  return out;
+}
+
 /**
  * Detecta artículos del catálogo en texto del **cliente** (no del asistente).
- * Prioriza nombres completos y varias palabras clave; evita falsos positivos con guarniciones sueltas.
+ * Si hay varias variantes del mismo producto (ej. varias Coca-Colas), no agrega todas:
+ * solo una cuando el cliente ya especificó sabor/tamaño; si no, ninguna (Karen debe preguntar).
  */
 export function inferLineItemsFromCorpus(corpus: string, menu: MenuItem[]) {
-  const hay = fold(corpus).replace(/\s+/g, " ");
+  const hay = expandedHay(corpus);
   if (!hay.trim()) return [] as { menuItemId: string; name: string; qty: number }[];
 
-  const ranked: { menuItemId: string; name: string; qty: number; score: number }[] = [];
+  const ranked: RankedLine[] = [];
   for (const m of menu) {
     const { score, qty } = scoreMenuItem(m, hay);
     if (score >= 100) ranked.push({ menuItemId: m.id, name: m.name, qty, score });
   }
 
   ranked.sort((a, b) => b.score - a.score || b.name.length - a.name.length);
-  const best = new Map<string, { menuItemId: string; name: string; qty: number }>();
-  for (const it of ranked) {
-    const prev = best.get(it.menuItemId);
-    if (!prev || it.qty > prev.qty) best.set(it.menuItemId, { menuItemId: it.menuItemId, name: it.name, qty: it.qty });
-  }
 
-  const topScore = ranked[0]?.score ?? 0;
+  const fullMatches = ranked.filter((it) => it.score >= 1000);
+  const partialResolved = resolvePartialAmbiguity(ranked, menu, hay);
+
+  const seen = new Set<string>();
   const out: { menuItemId: string; name: string; qty: number }[] = [];
-  for (const it of ranked) {
-    const chosen = best.get(it.menuItemId);
-    if (!chosen) continue;
-    if (topScore >= 500 && it.score < 150) continue;
-    if (!out.some((x) => x.menuItemId === it.menuItemId)) out.push(chosen);
+  for (const it of [...fullMatches, ...partialResolved]) {
+    if (seen.has(it.menuItemId)) continue;
+    seen.add(it.menuItemId);
+    out.push({ menuItemId: it.menuItemId, name: it.name, qty: it.qty });
   }
 
   return out.sort((a, b) => a.name.localeCompare(b.name, "es"));

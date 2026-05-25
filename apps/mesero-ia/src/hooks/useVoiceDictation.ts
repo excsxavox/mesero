@@ -290,6 +290,10 @@ function sanitizeForSpeech(raw: string) {
   t = t.replace(/#/g, "");
   /** Enlaces markdown [texto](url) → solo texto */
   t = t.replace(/\[([^\]]+)]\([^)]+\)/g, "$1");
+  /** Inclusivo con barra (Bienvenido/a): suena «barra» en TTS */
+  t = t.replace(/\b(\w+)o\/a\b/gi, (_, stem) => `${stem}os`);
+  t = t.replace(/\b(\w+)a\/o\b/gi, (_, stem) => `${stem}os`);
+  t = t.replace(/\s*\/\s*/g, " ");
   return t.replace(/\s+/g, " ").trim();
 }
 

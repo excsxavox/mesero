@@ -20,6 +20,15 @@ import {
 import { fetchCommercialOfferings, isCommercialOfferingsConfigured } from "./aiboxOfferings.js";
 import { catalogSource, getResolvedCatalog, invalidateCatalogCache } from "./menuCatalog.js";
 import { getOfferingImage } from "./offeringImageStore.js";
+import { filterAmbiguousMenuLines } from "./orderAmbiguity.js";
+import {
+  buildConversationPhaseHint,
+  buildWaiterHospitalityBlock,
+  buildWelcomeReply,
+  defaultWaiterFlow,
+  DEFAULT_ASSISTANT_EXTRA_INSTRUCTIONS,
+  isWakeOnlyOrShortGreeting,
+} from "./waiterServicePrompt.js";
 import {
   computeTableBills,
   markTablePaid,
@@ -196,58 +205,13 @@ function defaultStore() {
       },
     ]),
     orders: /** @type {Order[]} */ ([]),
-    flow: /** @type {FlowState} */ ({
-      nodes: [
-        {
-          id: "n1",
-          type: "step",
-          position: { x: 0, y: 0 },
-          data: {
-            label: "Bienvenida",
-            hint: "Saluda y ofrece el menú. Solo pregunta la mesa si el quiosco no tiene una mesa asignada en configuración.",
-          },
-        },
-        {
-          id: "n2",
-          type: "step",
-          position: { x: 260, y: 0 },
-          data: {
-            label: "Explicar menú",
-            hint: "Resume categorías sin decir precios (el cliente los ve en pantalla); recomienda según gustos.",
-          },
-        },
-        {
-          id: "n3",
-          type: "step",
-          position: { x: 520, y: 0 },
-          data: {
-            label: "Tomar pedido",
-            hint: "Confirma platos, cantidades, alergias y bebidas.",
-          },
-        },
-        {
-          id: "n4",
-          type: "step",
-          position: { x: 780, y: 0 },
-          data: {
-            label: "Confirmar",
-            hint: "Lee el resumen del pedido y pide confirmación explícita.",
-          },
-        },
-      ],
-      edges: [
-        { id: "e1", source: "n1", target: "n2" },
-        { id: "e2", source: "n2", target: "n3" },
-        { id: "e3", source: "n3", target: "n4" },
-      ],
-    }),
+    flow: /** @type {FlowState} */ (defaultWaiterFlow()),
     settings: {
       restaurantName: "Mi restaurante",
       wakeWord: normalizeWakeWord(process.env.MESERO_WAKE_WORD),
       tableCount: resolveTableCount({ tableCount: process.env.MESERO_TABLE_COUNT }),
       /** Texto libre que el admin puede usar para tono, políticas, etc. */
-      assistantExtraInstructions:
-        "Tono amable y profesional. Por defecto español; si el cliente habla o escribe en inglés, responde solo en inglés (sin mezclar idiomas). Si el cliente tiene alergias, pregunta ingredientes dudosos antes de confirmar.",
+      assistantExtraInstructions: DEFAULT_ASSISTANT_EXTRA_INSTRUCTIONS,
     },
     /** Nombres de categoría para el menú (elegibles al editar platos). */
     menuCategories: ["Entradas", "Principales", "Postres"],
@@ -581,10 +545,7 @@ function buildOfflineAssistantReply(messages, store, menu, kioskTable = null, ki
     return `Aquí tienes el menú resumido de ${name}:\n${menuBrief}${tail}${menuFoot}\n\n¿Quieres que te sugiera algo concreto o seguimos con tu pedido?`;
   }
   if (/hola|buenas|qué tal/.test(lower) && !/\b(hi|hello|hey)\b/i.test(lower)) {
-    const first = currentFlowStepNode(store.flow, 0);
-    const intro = first ? ` ${formatFlowStepForGuest(first, kioskTable)}` : "";
-    const mesaNote = kioskTable ? ` Tu mesa es ${formatTableLabel(kioskTable)}.` : "";
-    return `¡Hola! Bienvenido a ${name}.${mesaNote}${intro} ¿Te cuento opciones del menú o seguimos con lo que necesitas?`;
+    return buildWelcomeReply(store.settings, { kioskTable });
   }
   if (/gracias|muchas gracias|hasta luego|adi[oó]s|chao|nos vemos/.test(lower)) {
     return `Gracias a ti por elegir ${name}. Cuando quieras, aquí seguimos.`;
@@ -802,6 +763,16 @@ function lastUserMessageContent(messages) {
   return stripWakeWordFromUtterance(raw, resolveWakeWord(store.settings));
 }
 
+/** Texto reciente del cliente para validar DRAFT/ORDER (varios turnos del mismo pedido). */
+function recentUserOrderCorpus(messages, maxTurns = 5) {
+  const wake = resolveWakeWord(store.settings);
+  return messages
+    .filter((m) => m.role === "user")
+    .slice(-maxTurns)
+    .map((m) => stripWakeWordFromUtterance(String(m.content ?? ""), wake))
+    .join(" ");
+}
+
 function isShortEnglishGreeting(text) {
   const norm = String(text ?? "")
     .trim()
@@ -813,9 +784,7 @@ function isShortEnglishGreeting(text) {
 }
 
 function buildEnglishGreetingReply(store, kioskTable) {
-  const name = String(store.settings.restaurantName || "our restaurant").trim() || "our restaurant";
-  const tableNote = kioskTable ? ` You're at table ${kioskTable}.` : "";
-  return `Hello! Welcome to ${name}.${tableNote} How can I help you today—would you like to hear about the menu or place an order?`;
+  return buildWelcomeReply(store.settings, { kioskTable, english: true });
 }
 
 const KITCHEN_STATUS_PHRASE_ES = {
@@ -974,6 +943,19 @@ async function generateAssistantChatContent(messages, menu, { selectedTable, kit
     return buildEnglishGreetingReply(store, kioskTable);
   }
 
+  const userTurnCount = messages.filter((m) => m.role === "user").length;
+  const wakeWord = resolveWakeWord(store.settings);
+  if (
+    appMode !== "reception" &&
+    userTurnCount <= 1 &&
+    isWakeOnlyOrShortGreeting(lastUser, wakeWord)
+  ) {
+    return buildWelcomeReply(store.settings, {
+      kioskTable,
+      english: conversationPrefersEnglish(messages),
+    });
+  }
+
   const system = buildSystemPromptForMessages(messages, menu, promptOpts);
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -985,7 +967,8 @@ async function generateAssistantChatContent(messages, menu, { selectedTable, kit
     body: JSON.stringify({
       model,
       messages: [{ role: "system", content: system }, ...messages],
-      temperature: 0.5,
+      temperature: 0.7,
+      max_tokens: 280,
     }),
   });
   if (!r.ok) {
@@ -1106,11 +1089,17 @@ Si el cliente pregunta cómo va su pedido, si está listo, en preparación, etc.
   return `Eres el mesero virtual de "${store.settings.restaurantName}".
 Te presentas como ${wakeLabel} (mesero/a virtual). En el quiosco el cliente activa el micrófono diciendo la palabra «${wakeLabel}» antes de su pedido.
 
+BIENVENIDA (primer turno o solo saludo): responde con calidez de restaurante — «¡Buenas! Bienvenidos a ${store.settings.restaurantName}», preséntate como ${wakeLabel}, di que es un gusto atenderles y pregunta si quieren recomendación o ya saben qué pedir. No uses «Bienvenido/a» ni barras; no uses frases frías como «¿en qué te puedo ayudar?».
+
 MENÚ por categorías (usa los ids entre corchetes solo al registrar pedidos internamente; al hablar con el cliente usa nombres naturales):
 ${menuText}${scopeNote}${stockRule}
 
-FLUJO CONVERSACIONAL (sigue el espíritu de estos pasos en orden, adaptando al diálogo real):
+FLUJO CONVERSACIONAL (guía flexible — adapta al diálogo; no leas los pasos como guion literal):
 ${flowText}
+
+${buildWaiterHospitalityBlock()}
+
+${buildConversationPhaseHint(messages)}
 
 INSTRUCCIONES ADICIONALES DEL LOCAL:
 ${forceEnglish ? `(Nota: el cliente usa inglés en este turno; ignora cualquier indicación de responder solo en español.)\n` : ""}${store.settings.assistantExtraInstructions}
@@ -1123,11 +1112,12 @@ ${priceRule}${kitchenBlock}
 
 Mientras el cliente arma el pedido SIN confirmación final, incluye SIEMPRE al final (después de tu mensaje visible) un bloque:
 <<<DRAFT_JSON>>>{"items":[{"menuItemId":"id-del-menu","qty":1,"notes":""}]}<<<END_DRAFT_JSON>>>
-con los platos que el cliente pidió o aceptó para este pedido en construcción (usa solo menuItemId del menú). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó.
+con TODOS los platos que el cliente pidió o aceptó en este pedido en construcción. Usa el menuItemId exacto del menú de arriba (el id entre corchetes) que corresponda al nombre del plato que mencionó el cliente — no inventes ids ni confundas platos (ej. si pidió habas/choclo, no pongas arroz). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó.
+IMPORTANTE — productos con variantes: si el cliente pide algo genérico (ej. «una coca cola», «una cerveza») y en el menú hay varias opciones (lata, zero, 500 ml, etc.), NO pongas todas en DRAFT_JSON. Deja {"items":[]} y pregunta en voz cuál prefiere (tamaño, sabor, presentación). Solo agrega UNA línea cuando el cliente ya especificó la variante o eligió una de tus opciones.
 
 Para registrar un pedido confirmado, cuando el cliente confirme explícitamente, incluye al final un bloque JSON en una sola línea con este formato exacto:
 <<<ORDER_JSON>>>{"table":"Mesa X o vacío","items":[{"menuItemId":"m1","qty":2,"notes":"sin cebolla"}],"notes":"notas generales"}<<<END_ORDER_JSON>>>
-Solo incluye ese bloque cuando el pedido esté confirmado por el cliente. Tras confirmar, omite DRAFT_JSON o envía {"items":[]}.`;
+Solo incluye ese bloque cuando el pedido esté confirmado por el cliente. Tras confirmar, omite DRAFT_JSON o envía {"items":[]}. En ORDER_JSON tampoco incluyas todas las variantes de un producto genérico: solo la que el cliente confirmó.`;
 }
 
 const app = express();
@@ -1937,6 +1927,7 @@ app.post("/api/chat/complete", async (req, res) => {
   }
 
   const lastUser = lastUserMessageContent(messages);
+  const orderCorpus = recentUserOrderCorpus(messages);
   let content = "";
   try {
     content = await generateAssistantChatContent(messages, menu, { selectedTable, kitchenOrderIds, appMode });
@@ -1953,11 +1944,16 @@ app.post("/api/chat/complete", async (req, res) => {
     if (draftExtract.body != null) {
       try {
         const raw = JSON.parse(draftExtract.body.trim());
-        draftItems = resolveStructuredMenuLines(raw.items, menu).map((line) => ({
-          menuItemId: line.menuItemId,
-          name: line.name,
-          qty: line.qty,
-        }));
+        draftItems = filterAmbiguousMenuLines(
+          resolveStructuredMenuLines(raw.items, menu).map((line) => ({
+            menuItemId: line.menuItemId,
+            name: line.name,
+            qty: line.qty,
+          })),
+          menu,
+          orderCorpus,
+          { mode: "draft" },
+        );
       } catch {
         draftItems = [];
       }
@@ -1972,7 +1968,8 @@ app.post("/api/chat/complete", async (req, res) => {
   if (match) {
     try {
       const raw = JSON.parse(match[1].trim());
-      const resolved = resolveStructuredMenuLines(raw.items, menu);
+      let resolved = resolveStructuredMenuLines(raw.items, menu);
+      resolved = filterAmbiguousMenuLines(resolved, menu, orderCorpus, { mode: "order" });
       if (resolved.length === 0) {
         order = null;
       } else {

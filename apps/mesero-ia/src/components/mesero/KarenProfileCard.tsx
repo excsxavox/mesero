@@ -1,20 +1,29 @@
 type Props = {
   assistantName: string;
+  restaurantName?: string;
+  tableLabel?: string | null;
   lastAssistantText?: string;
   onClearConversation?: () => void;
   clearConversationDisabled?: boolean;
 };
 
-const DEFAULT_GREETING =
-  "¡Hola! Estoy lista para tomar tu pedido. Habla y con gusto te ayudaré.";
+function defaultGreeting(assistantName: string, restaurantName?: string, tableLabel?: string | null) {
+  const place = (restaurantName ?? "").trim() || "nuestro restaurante";
+  const mesa = tableLabel?.trim() ? ` ${tableLabel.trim()}.` : "";
+  const who = assistantName.trim() || "Karen";
+  return `¡Buenas! Bienvenidos a ${place}.${mesa} Soy ${who}, tu mesera, y es un gusto atenderte. ¿Te recomiendo algo de la carta o ya sabes qué te provoca?`;
+}
 
 export function KarenProfileCard({
   assistantName,
+  restaurantName,
+  tableLabel,
   lastAssistantText,
   onClearConversation,
   clearConversationDisabled,
 }: Props) {
-  const bubble = (lastAssistantText ?? "").trim() || DEFAULT_GREETING;
+  const bubble =
+    (lastAssistantText ?? "").trim() || defaultGreeting(assistantName, restaurantName, tableLabel);
   const short = bubble.length > 220 ? `${bubble.slice(0, 217).trim()}…` : bubble;
 
   return (

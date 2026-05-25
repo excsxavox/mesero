@@ -17,10 +17,10 @@ function HeaderWaveIcon() {
 export function VoiceHintsCard({ assistantName = "Karen" }: Props) {
   const name = assistantName.trim() || "Karen";
   const phrases: { rest: string }[] = [
+    { rest: "¿qué me recomiendas?" },
     { rest: "quiero ordenar" },
+    { rest: "una coca cola" },
     { rest: "quiero pagar" },
-    { rest: "quiero un postre" },
-    { rest: "me pasas un vaso de agua" },
   ];
 
   return (

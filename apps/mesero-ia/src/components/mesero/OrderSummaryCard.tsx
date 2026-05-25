@@ -98,7 +98,7 @@ export function OrderSummaryCard({
     [confirmed],
   );
 
-  const showDraftSection = lines.length > 0 || busy;
+  const showDraftSection = lines.length > 0 || busy || (pendingDraft?.length ?? 0) > 0;
 
   return (
     <section className="flex flex-col rounded-2xl border border-mesero-line/15 bg-mesero-panel/90 p-4 ring-1 ring-mesero-line/10">
@@ -114,6 +114,17 @@ export function OrderSummaryCard({
           </p>
           {lines.length > 0 ? (
             <OrderLinesList lines={lines} menuById={menuById} />
+          ) : (pendingDraft?.length ?? 0) > 0 ? (
+            <ul className="space-y-2.5">
+              {pendingDraft!.map((it) => (
+                <li key={it.menuItemId} className="flex items-center gap-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
+                    <p className="text-xs font-semibold text-amber-400">×{it.qty}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           ) : busy ? (
             <p className="text-sm text-mesero-text-muted/80">Escuchando tu pedido…</p>
           ) : (

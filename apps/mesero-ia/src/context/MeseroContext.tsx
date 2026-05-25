@@ -270,7 +270,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         });
         setMessages((m) => [...m, { role: "assistant", content: res.content, at: new Date().toISOString() }]);
         playAssistantVoice(res.content, next);
-        if (Array.isArray(res.draftItems)) {
+        if (Array.isArray(res.draftItems) && res.draftItems.length > 0) {
           setPendingDraft(
             res.draftItems.map((it) => ({
               menuItemId: it.menuItemId,
@@ -278,6 +278,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
               qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
             })),
           );
+          setTouchCart({});
         }
         if (res.paymentFlow?.phase === "ready") {
           orderToastRef.current?.("Cuenta enviada a caja con datos de facturación.");

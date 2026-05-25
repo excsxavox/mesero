@@ -33,13 +33,13 @@ function linesFromDraftInput(menu: MenuItem[], draft: DraftLineInput[] | undefin
   const out: DisplayLine[] = [];
   for (const it of draft) {
     const m = menu.find((x) => x.id === it.menuItemId);
+    const qty = Math.max(1, Math.min(99, Math.floor(it.qty) || 1));
+    const name = (it.name || m?.name || "").trim();
+    if (!it.menuItemId || !name) continue;
     if (m && isOnMenu(m)) {
-      out.push({
-        menuItemId: it.menuItemId,
-        name: it.name || m.name,
-        qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
-        unitPrice: m.price,
-      });
+      out.push({ menuItemId: it.menuItemId, name, qty, unitPrice: m.price });
+    } else {
+      out.push({ menuItemId: it.menuItemId, name, qty, unitPrice: m?.price ?? null });
     }
   }
   return out;
@@ -54,11 +54,11 @@ export function mergedActiveLines(
 ) {
   const map = new Map<string, DisplayLine>();
   for (const it of linesFromDraftInput(menu, assistantDraft)) map.set(it.menuItemId, it);
-  for (const it of touchCartLines(menu, touchCart)) map.set(it.menuItemId, it);
   for (const it of draftLinesFromCorpus(corpus, menu)) {
     const prev = map.get(it.menuItemId);
     if (!prev || it.qty > prev.qty) map.set(it.menuItemId, it);
   }
+  for (const it of touchCartLines(menu, touchCart)) map.set(it.menuItemId, it);
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 

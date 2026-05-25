@@ -424,6 +424,8 @@ export function ChatPage() {
             <div className="min-w-0 md:[grid-area:profile]">
               <KarenProfileCard
                 assistantName={assistantName}
+                restaurantName={settings?.restaurantName}
+                tableLabel={tableLabel}
                 lastAssistantText={lastAssistantText}
                 onClearConversation={
                   messages.length > 0 && !needsMandatoryPasswordSetup ? handleClearConversation : undefined
