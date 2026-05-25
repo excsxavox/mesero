@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./components/auth/RequireAuth";
+import { KioskFullscreenGuard } from "./components/mesero/KioskFullscreenGuard";
 import { AuthProvider } from "./context/AuthContext";
 import { MeseroThemeProvider } from "./context/MeseroThemeContext";
 import { MeseroLayout } from "./context/MeseroContext";
@@ -19,6 +20,7 @@ export default function App() {
     <MeseroThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <KioskFullscreenGuard />
           <Routes>
             <Route
               path="/login"

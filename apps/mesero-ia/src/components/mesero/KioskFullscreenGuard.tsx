@@ -1,31 +1,46 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { isAdminExitLockArmed, MESERO_LOCK_CHANGED } from "../../lib/adminExitLock";
+import { isMeseroFullscreenPinned, MESERO_FULLSCREEN_CHANGED } from "../../lib/meseroFullscreen";
 import { useFullscreen } from "../../hooks/useFullscreen";
 
+function fsActive() {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null };
+  return !!(document.fullscreenElement ?? doc.webkitFullscreenElement);
+}
+
+function shouldKeepFullscreen() {
+  return isAdminExitLockArmed() || isMeseroFullscreenPinned();
+}
+
 /**
- * Con el candado activo, mantiene pantalla completa y vuelve a entrar si el usuario sale (Escape, etc.).
+ * Con candado activo o pantalla completa manual, mantiene fullscreen en document y re-entra al cambiar de ruta.
  */
 export function KioskFullscreenGuard() {
+  const location = useLocation();
   const [lockArmed, setLockArmed] = useState(() => isAdminExitLockArmed());
+  const [pinned, setPinned] = useState(() => isMeseroFullscreenPinned());
   const { isFullscreen, enter, supported } = useFullscreen();
   const reentering = useRef(false);
 
   useEffect(() => {
-    const sync = () => setLockArmed(isAdminExitLockArmed());
-    window.addEventListener(MESERO_LOCK_CHANGED, sync);
-    return () => window.removeEventListener(MESERO_LOCK_CHANGED, sync);
+    const syncLock = () => setLockArmed(isAdminExitLockArmed());
+    const syncPinned = () => setPinned(isMeseroFullscreenPinned());
+    window.addEventListener(MESERO_LOCK_CHANGED, syncLock);
+    window.addEventListener(MESERO_FULLSCREEN_CHANGED, syncPinned);
+    return () => {
+      window.removeEventListener(MESERO_LOCK_CHANGED, syncLock);
+      window.removeEventListener(MESERO_FULLSCREEN_CHANGED, syncPinned);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!lockArmed || !supported) return;
+  const maintain = lockArmed || pinned;
 
-    const fsActive = () => {
-      const doc = document as Document & { webkitFullscreenElement?: Element | null };
-      return !!(document.fullscreenElement ?? doc.webkitFullscreenElement);
-    };
+  useEffect(() => {
+    if (!maintain || !supported) return;
 
     const ensureFullscreen = () => {
-      if (!isAdminExitLockArmed() || reentering.current) return;
+      if (!shouldKeepFullscreen() || reentering.current) return;
       if (fsActive()) return;
       reentering.current = true;
       void enter().finally(() => {
@@ -43,13 +58,13 @@ export function KioskFullscreenGuard() {
       document.removeEventListener("fullscreenchange", ensureFullscreen);
       document.removeEventListener("webkitfullscreenchange", ensureFullscreen);
     };
-  }, [lockArmed, supported, enter]);
+  }, [maintain, supported, enter, location.pathname]);
 
   useEffect(() => {
-    if (lockArmed && supported && !isFullscreen && !reentering.current) {
+    if (maintain && supported && !isFullscreen && !reentering.current) {
       void enter();
     }
-  }, [lockArmed, supported, isFullscreen, enter]);
+  }, [maintain, supported, isFullscreen, enter, location.pathname]);
 
   return null;
 }

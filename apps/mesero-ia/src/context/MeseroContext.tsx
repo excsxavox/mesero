@@ -10,7 +10,6 @@ import {
 } from "react";
 import { Outlet, useSearchParams } from "react-router-dom";
 import { MeseroThemeSync } from "../components/MeseroThemeSync";
-import { KioskFullscreenGuard } from "../components/mesero/KioskFullscreenGuard";
 import { preloadSpeechVoices, speakTextAsync, stopSpeaking } from "../hooks/useVoiceDictation";
 import { useStableRecognitionLang } from "../hooks/useStableRecognitionLang";
 import { useOrderStatusSync } from "../hooks/useOrderStatusSync";
@@ -374,7 +373,6 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   return (
     <MeseroContext.Provider value={value}>
       <MeseroThemeSync />
-      <KioskFullscreenGuard />
       {children ?? <Outlet />}
     </MeseroContext.Provider>
   );

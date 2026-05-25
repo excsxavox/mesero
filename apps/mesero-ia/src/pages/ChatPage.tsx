@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFullscreen } from "../hooks/useFullscreen";
 import { useLocation, useNavigate } from "react-router-dom";
 import { saveMeseroSession } from "../lib/meseroSessionStorage";
@@ -21,6 +21,7 @@ import {
   setAdminEntryUnlocked,
   setAdminExitLockArmed,
 } from "../lib/adminExitLock";
+import { setMeseroFullscreenPinned } from "../lib/meseroFullscreen";
 import { useRefreshableMenu } from "../hooks/useRefreshableMenu";
 import { getHealth, putSettings, verifyAdminExitPassword } from "../lib/api";
 
@@ -71,8 +72,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [openAiOnServer, setOpenAiOnServer] = useState<boolean | null>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
-  const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen, toggle: toggleFullscreen, supported: fullscreenSupported } =
+  const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen, supported: fullscreenSupported } =
     useFullscreen();
 
   const onFullscreenToggle = useCallback(() => {
@@ -82,8 +82,14 @@ export function ChatPage() {
       setAdminGate({ kind: "disarm" });
       return;
     }
-    void toggleFullscreen(pageRef.current ?? undefined);
-  }, [lockArmed, toggleFullscreen]);
+    if (isFullscreen) {
+      setMeseroFullscreenPinned(false);
+      void exitFullscreen();
+    } else {
+      setMeseroFullscreenPinned(true);
+      void enterFullscreen();
+    }
+  }, [lockArmed, isFullscreen, enterFullscreen, exitFullscreen]);
 
   const bumpTouchDelta = useCallback((menuItemId: string, delta: number) => {
     setTouchCart((prev) => {
@@ -191,7 +197,7 @@ export function ChatPage() {
     if (!lockArmed) {
       setAdminExitLockArmed(true);
       setLockArmed(true);
-      if (fullscreenSupported) void enterFullscreen(pageRef.current ?? undefined);
+      if (fullscreenSupported) void enterFullscreen();
       setToast(
         "Candado activo: pantalla bloqueada en modo quiosco. Usa la contraseña de administrador para desbloquear.",
       );
@@ -263,7 +269,6 @@ export function ChatPage() {
 
   return (
     <div
-      ref={pageRef}
       className={`mx-auto flex min-h-0 flex-col px-3 py-4 sm:px-5 sm:py-5 ${
         isFullscreen ? "h-[100dvh] max-w-none w-full" : "h-full max-w-7xl"
       }`}
