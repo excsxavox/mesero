@@ -53,6 +53,7 @@ import { createCompanyStore } from "./companyStore.js";
 import {
   bearerToken,
   companyContextMiddleware,
+  withRequestCompanyContext,
   companyStorage,
   getCompanyContext,
   resolveCompanyId,
@@ -1823,16 +1824,7 @@ app.get("/api/menu-pdf", (req, res) => {
 });
 
 const menuPdfUpload = multer({
-  storage: multer.diskStorage({
-    destination(_req, _file, cb) {
-      fs.mkdirSync(MENU_PDF_DIR, { recursive: true });
-      cb(null, MENU_PDF_DIR);
-    },
-    filename(_req, _file, cb) {
-      const companyId = getCompanyContext()?.companyId ?? "default";
-      cb(null, `${companyId}.pdf`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
     const ok =
@@ -1841,15 +1833,45 @@ const menuPdfUpload = multer({
   },
 });
 
-app.post("/api/settings/menu-pdf", menuPdfUpload.single("pdf"), (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ error: "Seleccione un archivo PDF." });
-    return;
-  }
-  saveStore();
-  broadcast("settings", publicSettings());
-  res.json(publicSettings());
-});
+function menuPdfUploadMiddleware(req, res, next) {
+  menuPdfUpload.single("pdf")(req, res, (err) => {
+    if (err) {
+      const msg =
+        err.code === "LIMIT_FILE_SIZE"
+          ? "El PDF no puede superar 15 MB."
+          : String(err.message ?? err);
+      res.status(400).json({ error: msg });
+      return;
+    }
+    next();
+  });
+}
+
+app.post(
+  "/api/settings/menu-pdf",
+  menuPdfUploadMiddleware,
+  withRequestCompanyContext(storeApi),
+  (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "Seleccione un archivo PDF." });
+      return;
+    }
+    const ctx = getCompanyContext();
+    if (!ctx?.companyId) {
+      res.status(500).json({ error: "Contexto de empresa no disponible." });
+      return;
+    }
+    try {
+      fs.mkdirSync(MENU_PDF_DIR, { recursive: true });
+      fs.writeFileSync(menuPdfFilePath(ctx.companyId), req.file.buffer);
+      saveStore();
+      broadcast("settings", publicSettings());
+      res.json(publicSettings());
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message ?? e) });
+    }
+  },
+);
 
 app.delete("/api/settings/menu-pdf", (_req, res) => {
   const ctx = getCompanyContext();

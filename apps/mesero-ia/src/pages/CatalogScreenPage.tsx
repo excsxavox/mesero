@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CatalogKarenProfile } from "../components/catalog/CatalogSidebarPanel";
 import { CatalogOrderSummary } from "../components/catalog/CatalogOrderSummary";
+import { RestaurantLogo } from "../components/mesero/RestaurantLogo";
 import { useAuth } from "../context/AuthContext";
 import { useMesero } from "../context/MeseroContext";
 import { useMeseroTheme } from "../context/MeseroThemeContext";
@@ -200,9 +201,7 @@ export function CatalogScreenPage() {
             ← Volver al mesero
           </button>
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-mesero-active text-base">
-              🍔
-            </span>
+            <RestaurantLogo size={36} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-mesero-text">{restaurantName}</p>
               <p className="text-[10px] text-mesero-text-muted">{assistantName} · mesera IA</p>

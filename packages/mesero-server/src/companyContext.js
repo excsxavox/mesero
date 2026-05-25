@@ -91,6 +91,10 @@ export function companyContextMiddleware(storeApi) {
         }
       }
 
+      req.meseroCompanyId = companyId;
+      req.meseroBranchId = branchId;
+      req.meseroAccessToken = accessToken;
+
       companyStorage.run(
         {
           companyId,
@@ -104,5 +108,32 @@ export function companyContextMiddleware(storeApi) {
     } catch (e) {
       res.status(500).json({ error: String(e?.message ?? e) });
     }
+  };
+}
+
+/**
+ * Tras middlewares que pierden AsyncLocalStorage (p. ej. multer), re-vincula el slice de empresa.
+ * @param {{ get: (id: string) => object; persist: (id: string, slice: object) => void }} storeApi
+ */
+export function withRequestCompanyContext(storeApi) {
+  return (req, res, next) => {
+    const companyId = req.meseroCompanyId;
+    if (!companyId) {
+      res.status(400).json({
+        error: "Falta companyId. Inicia sesión de nuevo.",
+      });
+      return;
+    }
+    const store = storeApi.get(companyId);
+    companyStorage.run(
+      {
+        companyId,
+        branchId: req.meseroBranchId ?? null,
+        accessToken: req.meseroAccessToken ?? null,
+        store,
+        save: () => storeApi.persist(companyId, store),
+      },
+      () => next(),
+    );
   };
 }

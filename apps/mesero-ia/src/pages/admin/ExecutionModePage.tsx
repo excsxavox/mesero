@@ -1,4 +1,5 @@
 import { useAudioDevicePicker } from "../../lib/audioDevices";
+import { RestaurantLogo } from "../../components/mesero/RestaurantLogo";
 
 export function ExecutionModePage() {
   const {
@@ -18,7 +19,7 @@ export function ExecutionModePage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 px-6 py-8 ring-1 ring-zinc-800/80">
-        <img src="/mesero-logo.svg" alt="Logo Mesero" className="h-24 w-24 select-none" width={96} height={96} />
+        <RestaurantLogo size={96} className="rounded-2xl" />
         <h1 className="text-center text-2xl font-semibold text-zinc-50">Modo ejecución</h1>
         <p className="text-center text-sm text-zinc-500">
           Elige el micrófono y la salida de audio del quiosco o tablet. Se guarda en este navegador. En la pantalla

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { RestaurantLogo } from "./RestaurantLogo";
 import { ThemeToggleButton } from "./ThemeToggleButton";
 import type { MeseroTheme } from "../../lib/meseroTheme";
 
@@ -18,11 +19,7 @@ type Props = {
 };
 
 function IconBurger() {
-  return (
-    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-mesero-accent to-mesero-accent-strong text-lg shadow-lg shadow-mesero-deep/40">
-      🍔
-    </span>
-  );
+  return <RestaurantLogo size={44} />;
 }
 
 function IconGear() {

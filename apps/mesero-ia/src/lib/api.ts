@@ -1,11 +1,22 @@
 import type { FlowState, MenuItem, Order, Settings, SettingsWrite } from "./types";
 import { authFetch } from "./authSession";
 
-const json = async <T>(r: Response): Promise<T> => {
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(t || r.statusText);
+async function readApiError(r: Response): Promise<string> {
+  const clone = r.clone();
+  try {
+    const data = (await r.json()) as { error?: string };
+    if (typeof data?.error === "string" && data.error) return data.error;
+  } catch {
+    const t = await clone.text();
+    const pre = t.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i)?.[1]?.trim();
+    if (pre) return pre;
+    if (t && !/<html/i.test(t)) return t.slice(0, 400);
   }
+  return r.statusText || "Error del servidor";
+}
+
+const json = async <T>(r: Response): Promise<T> => {
+  if (!r.ok) throw new Error(await readApiError(r));
   return r.json() as Promise<T>;
 };
 
@@ -123,10 +134,7 @@ export async function uploadMenuPdf(file: File) {
   const fd = new FormData();
   fd.append("pdf", file);
   const r = await authFetch("/api/settings/menu-pdf", { method: "POST", body: fd });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(t || r.statusText);
-  }
+  if (!r.ok) throw new Error(await readApiError(r));
   return r.json() as Promise<Settings>;
 }
 

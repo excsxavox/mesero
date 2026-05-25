@@ -155,7 +155,7 @@ export function MenuPdfSettingsSection() {
           type="file"
           accept="application/pdf,.pdf"
           disabled={busy}
-          className="mt-2 block w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-500 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:file:bg-amber-400"
+          className="mt-2 block w-full text-sm text-zinc-400 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[var(--theme-active)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[var(--theme-active-strong)]"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
             e.target.value = "";
@@ -191,7 +191,7 @@ export function MenuPdfSettingsSection() {
           type="button"
           disabled={busy}
           onClick={() => void onSaveUrl()}
-          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+          className="btn-mesero-primary rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
           Guardar enlace
         </button>
