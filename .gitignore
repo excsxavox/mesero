@@ -10,6 +10,7 @@ packages/mesero-server/data/mesero.db
 packages/mesero-server/data/mesero.db-wal
 packages/mesero-server/data/mesero.db-shm
 packages/mesero-server/data/jwt-secret.txt
+packages/mesero-server/data/menu-pdfs/
 packages/facturacion-server/data/
 *.p12
 *.pfx

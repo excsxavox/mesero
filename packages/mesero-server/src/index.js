@@ -58,6 +58,7 @@ import {
   getCompanyContext,
   resolveCompanyId,
 } from "./companyContext.js";
+import { seedDefaultMenuPdf } from "./menuPdfSeed.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Variables desde .env: raíz del monorepo y, si existe, packages/mesero-server/.env (manda este último si repite claves)
@@ -2304,6 +2305,7 @@ wss.on("connection", (ws, req) => {
 server.listen(PORT, () => {
   console.log(`mesero-server http://localhost:${PORT}`);
   console.log(`SQLite: ${storeApi.dbPath}`);
+  seedDefaultMenuPdf(storeApi, MENU_PDF_DIR, DATA_DIR);
   if (openAiApiKey()) {
     console.log("OpenAI: OPENAI_API_KEY cargada (chat con modelo completo).");
   } else {

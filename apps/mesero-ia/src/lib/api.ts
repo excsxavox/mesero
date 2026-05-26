@@ -1,5 +1,5 @@
 import type { FlowState, MenuItem, Order, Settings, SettingsWrite } from "./types";
-import { authFetch } from "./authSession";
+import { authFetch, ensureValidAccessToken } from "./authSession";
 
 async function readApiError(r: Response): Promise<string> {
   if (r.status === 413) {
@@ -141,12 +141,61 @@ export async function putSettings(s: SettingsWrite) {
   );
 }
 
-export async function uploadMenuPdf(file: File) {
-  const fd = new FormData();
-  fd.append("pdf", file);
-  const r = await authFetch("/api/settings/menu-pdf", { method: "POST", body: fd });
-  if (!r.ok) throw new Error(await readApiError(r));
-  return r.json() as Promise<Settings>;
+/** Subida con XHR: en móvil fetch() a veces corta PDFs grandes (~7 MB) con "Failed to fetch". */
+export function uploadMenuPdf(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<Settings> {
+  return new Promise((resolve, reject) => {
+    void (async () => {
+      const session = await ensureValidAccessToken();
+      if (!session?.accessToken) {
+        reject(new Error("Sesión caducada. Cierra sesión y vuelve a entrar."));
+        return;
+      }
+      const fd = new FormData();
+      fd.append("pdf", file);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/settings/menu-pdf");
+      xhr.timeout = 600_000;
+      xhr.setRequestHeader("Authorization", `Bearer ${session.accessToken}`);
+      const companyId = session.profile?.companyIdDefault?.trim();
+      if (companyId) xhr.setRequestHeader("X-Company-Id", companyId);
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onProgress) {
+          onProgress(Math.min(100, Math.round((ev.loaded / ev.total) * 100)));
+        }
+      };
+      xhr.onload = () => {
+        void (async () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText) as Settings);
+            } catch {
+              reject(new Error("Respuesta del servidor no válida."));
+            }
+            return;
+          }
+          reject(
+            new Error(
+              await readApiError(
+                new Response(xhr.responseText || xhr.statusText, { status: xhr.status }),
+              ),
+            ),
+          );
+        })();
+      };
+      xhr.onerror = () =>
+        reject(
+          new Error(
+            "No se pudo enviar el archivo (conexión interrumpida). Mantén la pantalla encendida y prueba con Wi‑Fi estable.",
+          ),
+        );
+      xhr.ontimeout = () =>
+        reject(new Error("La subida tardó demasiado. Prueba con Wi‑Fi o un PDF más pequeño."));
+      xhr.send(fd);
+    })().catch(reject);
+  });
 }
 
 export async function deleteMenuPdf() {

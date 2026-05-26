@@ -71,14 +71,24 @@ export function MenuPdfSettingsSection() {
       setStatus("El archivo debe ser un PDF.");
       return;
     }
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    if (file.size > 15 * 1024 * 1024) {
+      setStatus("El PDF no puede superar 15 MB. Comprime el archivo e inténtalo de nuevo.");
+      return;
+    }
     setBusy(true);
-    setStatus("");
+    setStatus(
+      `Subiendo PDF (${sizeMb} MB)… En móvil puede tardar 1–3 minutos; no cierres esta pantalla.`,
+    );
     try {
-      const updated = await uploadMenuPdf(file);
+      const updated = await uploadMenuPdf(file, (pct) => {
+        setStatus(`Subiendo PDF (${sizeMb} MB)… ${pct}% — no cierres esta pantalla.`);
+      });
       setForm(updated);
       setStatus("PDF subido. El QR del mesero ya apunta a este archivo.");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Error al subir el PDF.");
+      const msg = e instanceof Error ? e.message : "Error al subir el PDF.";
+      setStatus(msg.startsWith("Error") ? msg : msg);
     } finally {
       setBusy(false);
     }
