@@ -56,8 +56,9 @@ function getRecognitionCtor(): RecCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-const POST_PAUSE_COOLDOWN_MS = 900;
 const DEDUPE_MS = 1200;
+const RESUME_LISTEN_DELAY_MS = 750;
+const POST_COMMAND_BLOCK_MS = 900;
 const MIN_COMMAND_LEN = 2;
 const CHUNK_MERGE_MS = 750;
 
@@ -85,10 +86,8 @@ async function warmMicrophoneOnce() {
 export type WakeListenOpts = {
   wakeWord?: string;
   lang?: string;
-  /** Pausa dura: apaga el micrófono (p. ej. falta contraseña). */
+  /** Apaga el micrófono (contraseña, API en curso, TTS del bot). */
   paused: boolean;
-  /** Bot hablando: micrófono sigue activo pero se difieren comandos para evitar eco. */
-  ttsActive?: boolean;
   onCommand: (textAfterWake: string) => void | Promise<void>;
 };
 
@@ -98,7 +97,6 @@ export type WakeListenOpts = {
 export function useWakeWordListening(opts: WakeListenOpts) {
   const onCommandRef = useRef(opts.onCommand);
   const pausedRef = useRef(opts.paused);
-  const ttsActiveRef = useRef(opts.ttsActive ?? false);
   const wakeRef = useRef(opts.wakeWord ?? "karen");
   const langRef = useRef(opts.lang ?? "es-ES");
   const hiddenRef = useRef(false);
@@ -108,7 +106,6 @@ export function useWakeWordListening(opts: WakeListenOpts) {
     onCommandRef.current = opts.onCommand;
   }, [opts.onCommand]);
   pausedRef.current = opts.paused;
-  ttsActiveRef.current = opts.ttsActive ?? false;
   wakeRef.current = opts.wakeWord ?? "karen";
   langRef.current = opts.lang ?? "es-ES";
 
@@ -118,13 +115,11 @@ export function useWakeWordListening(opts: WakeListenOpts) {
   const supported = getRecognitionCtor() !== null;
 
   const recRef = useRef<SpeechRecognitionInstance | null>(null);
-  const postPauseCooldownUntilRef = useRef(0);
+  const blockListenUntilRef = useRef(0);
   const armedUntilRef = useRef(0);
   const lastFiredRef = useRef({ text: "", at: 0 });
   const chunkBufferRef = useRef("");
   const chunkMergeTimerRef = useRef(0);
-  const deferredCommandRef = useRef<string | null>(null);
-  const wasTtsRef = useRef(opts.ttsActive ?? false);
   const shuttingDownRef = useRef(false);
   const warmedRef = useRef(false);
   const restartTimerRef = useRef(0);
@@ -175,11 +170,10 @@ export function useWakeWordListening(opts: WakeListenOpts) {
 
   useEffect(() => {
     if (opts.paused) {
-      armedUntilRef.current = 0;
       chunkBufferRef.current = "";
-      deferredCommandRef.current = null;
       if (chunkMergeTimerRef.current) window.clearTimeout(chunkMergeTimerRef.current);
       chunkMergeTimerRef.current = 0;
+      blockListenUntilRef.current = Date.now() + POST_COMMAND_BLOCK_MS;
     }
   }, [opts.paused]);
 
@@ -191,36 +185,15 @@ export function useWakeWordListening(opts: WakeListenOpts) {
       return;
     }
     lastFiredRef.current = { text: command, at: now };
+    blockListenUntilRef.current = Date.now() + POST_COMMAND_BLOCK_MS;
     wakeLog("command", command);
     void Promise.resolve(onCommandRef.current(command)).catch(() => null);
   }, []);
 
-  const flushDeferredCommand = useCallback(() => {
-    const cmd = deferredCommandRef.current?.trim();
-    deferredCommandRef.current = null;
-    if (cmd) fireCommand(cmd);
-  }, [fireCommand]);
-
-  useEffect(() => {
-    const wasTts = wasTtsRef.current;
-    const isTts = opts.ttsActive ?? false;
-    wasTtsRef.current = isTts;
-    if (wasTts && !isTts) {
-      postPauseCooldownUntilRef.current = Date.now() + POST_PAUSE_COOLDOWN_MS;
-      wakeLog("tts ended, cooldown", POST_PAUSE_COOLDOWN_MS);
-      window.setTimeout(() => {
-        flushDeferredCommand();
-        if (!pausedRef.current && !hiddenRef.current && slotRef.current === 1) {
-          stopRec();
-          window.setTimeout(() => startRecRef.current(), 250);
-        }
-      }, POST_PAUSE_COOLDOWN_MS);
-    }
-  }, [opts.ttsActive, flushDeferredCommand, stopRec]);
-
   const processBufferedUtterance = useCallback(
     (chunk: string) => {
       if (pausedRef.current || hiddenRef.current) return;
+      if (Date.now() < blockListenUntilRef.current) return;
 
       const w = wakeRef.current || "karen";
       const parsed = parseWakeSpeechFragment(chunk, w, armedUntilRef.current, MIN_COMMAND_LEN);
@@ -229,18 +202,7 @@ export function useWakeWordListening(opts: WakeListenOpts) {
 
       if (parsed.result.kind !== "command") return;
 
-      const command = parsed.result.command;
-      if (ttsActiveRef.current) {
-        deferredCommandRef.current = command;
-        wakeLog("deferred (tts)", command);
-        return;
-      }
-      if (Date.now() < postPauseCooldownUntilRef.current) {
-        deferredCommandRef.current = command;
-        wakeLog("deferred (cooldown)", command);
-        return;
-      }
-      fireCommand(command);
+      fireCommand(parsed.result.command);
     },
     [fireCommand],
   );
@@ -311,7 +273,7 @@ export function useWakeWordListening(opts: WakeListenOpts) {
           if (!r.isFinal) continue;
           const t = (r[0]?.transcript ?? "").trim();
           if (!t) continue;
-          wakeLog("heard", t, { tts: ttsActiveRef.current });
+          wakeLog("heard", t);
           enqueueFinalChunk(t);
         }
       };
@@ -422,7 +384,8 @@ export function useWakeWordListening(opts: WakeListenOpts) {
       }
       if (cancelled || opts.paused || hiddenRef.current || slotRef.current !== 1) return;
       clearRestart();
-      restartTimerRef.current = window.setTimeout(() => startRecRef.current(), 400);
+      blockListenUntilRef.current = Date.now() + RESUME_LISTEN_DELAY_MS;
+      restartTimerRef.current = window.setTimeout(() => startRecRef.current(), RESUME_LISTEN_DELAY_MS);
     })();
 
     return () => {

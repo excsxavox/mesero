@@ -473,7 +473,7 @@ export function ChatPage() {
             </div>
             <div className="flex min-w-0 flex-col gap-3 md:[grid-area:categories]">
               <VoiceHintsCard assistantName={assistantName} />
-              <VoiceListeningCard assistantName={assistantName} active={busy || ttsActive} />
+              <VoiceListeningCard assistantName={assistantName} listening={listening} botActive={busy || ttsActive} />
             </div>
             <div className="min-w-0 md:[grid-area:hints] md:self-stretch">
               <MenuQuickPanel

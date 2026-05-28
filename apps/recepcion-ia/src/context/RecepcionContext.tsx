@@ -300,8 +300,7 @@ export function RecepcionLayout({ children }: { children?: ReactNode }) {
   const { supported, listening, error: voiceError } = useWakeWordListening({
     wakeWord,
     lang: recognitionLang,
-    paused: needsMandatoryPasswordSetup,
-    ttsActive,
+    paused: needsMandatoryPasswordSetup || busy || ttsActive,
     onCommand: (t) => void sendRef.current(t),
   });
 

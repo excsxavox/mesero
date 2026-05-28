@@ -392,8 +392,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   const { supported, listening, error: voiceError, activateMicrophone } = useWakeWordListening({
     wakeWord,
     lang: recognitionLang,
-    paused: needsMandatoryPasswordSetup,
-    ttsActive,
+    paused: needsMandatoryPasswordSetup || busy || ttsActive,
     onCommand: (t) => void sendRef.current(t),
   });
 
