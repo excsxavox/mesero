@@ -201,7 +201,7 @@ function sizeHintsInHay(name, hay) {
   return false;
 }
 
-/** Pedidos genéricos («una cola») que abarcan varias variantes del menú. */
+/** Pedidos genéricos («una cola», «un jugo») que abarcan varias variantes del menú. */
 const GENERIC_PRODUCT_HINTS = [
   {
     label: "Gaseosa",
@@ -212,6 +212,16 @@ const GENERIC_PRODUCT_HINTS = [
     label: "Cerveza",
     re: /\b(cerveza|beer)\b/i,
     matchItem: (name) => /\b(cerveza|beer|pilsener|club)\b/i.test(fold(name)),
+  },
+  {
+    label: "Jugo",
+    re: /\b(jugo|zumo|juguito)\b/i,
+    matchItem: (name) => /\b(jugo|zumo)\b/i.test(fold(name)),
+  },
+  {
+    label: "Agua",
+    re: /\b(agua)\b/i,
+    matchItem: (name) => /\b(agua)\b/i.test(fold(name)),
   },
 ];
 

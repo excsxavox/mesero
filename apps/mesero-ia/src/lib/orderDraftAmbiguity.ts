@@ -101,6 +101,16 @@ const GENERIC_PRODUCT_HINTS = [
     re: /\b(cerveza|beer)\b/i,
     matchItem: (name: string) => /\b(cerveza|beer|pilsener|club)\b/i.test(fold(name)),
   },
+  {
+    label: "Jugo",
+    re: /\b(jugo|zumo|juguito)\b/i,
+    matchItem: (name: string) => /\b(jugo|zumo)\b/i.test(fold(name)),
+  },
+  {
+    label: "Agua",
+    re: /\b(agua)\b/i,
+    matchItem: (name: string) => /\b(agua)\b/i.test(fold(name)),
+  },
 ];
 
 function findGenericAmbiguousGroups(hay: string, menu: MenuItem[]) {
