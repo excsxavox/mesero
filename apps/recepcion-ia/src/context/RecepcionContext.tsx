@@ -84,6 +84,12 @@ export function RecepcionLayout({ children }: { children?: ReactNode }) {
   );
   const [busy, setBusy] = useState(false);
   const [ttsActive, setTtsActive] = useState(false);
+  const busyRef = useRef(false);
+  const ttsActiveRef = useRef(false);
+  busyRef.current = busy;
+  ttsActiveRef.current = ttsActive;
+  const sendRef = useRef<(raw: string) => Promise<void>>(async () => {});
+  const pendingVoiceRef = useRef<string | null>(null);
   const orderToastRef = useRef<((msg: string) => void) | null>(null);
   const confirmedRef = useRef(confirmed);
   confirmedRef.current = confirmed;
@@ -227,11 +233,22 @@ export function RecepcionLayout({ children }: { children?: ReactNode }) {
     setMessages([]);
   }, []);
 
+  const flushPendingVoice = useCallback(() => {
+    const pending = pendingVoiceRef.current?.trim();
+    if (!pending || busyRef.current || ttsActiveRef.current) return;
+    pendingVoiceRef.current = null;
+    window.setTimeout(() => void sendRef.current(pending), 400);
+  }, []);
+
   const sendWithText = useCallback(
     async (raw: string) => {
       if (needsMandatoryPasswordSetup) return;
       const text = raw.trim();
-      if (!text || busy) return;
+      if (!text) return;
+      if (busyRef.current || ttsActiveRef.current) {
+        pendingVoiceRef.current = text;
+        return;
+      }
       const next: RecepcionMsg[] = [...messages, { role: "user", content: text, at: new Date().toISOString() }];
       setMessages(next);
       setBusy(true);
@@ -264,13 +281,18 @@ export function RecepcionLayout({ children }: { children?: ReactNode }) {
         playAssistantVoice(errText, next);
       } finally {
         setBusy(false);
+        window.setTimeout(flushPendingVoice, 450);
       }
     },
-    [busy, messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable],
+    [messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable, flushPendingVoice],
   );
 
-  const sendRef = useRef(sendWithText);
   sendRef.current = sendWithText;
+
+  useEffect(() => {
+    if (busy || ttsActive) return;
+    flushPendingVoice();
+  }, [busy, ttsActive, flushPendingVoice]);
 
   const recognitionLang = useStableRecognitionLang(messages, wakeWord);
   const assistantName = useMemo(() => displayAssistantName(wakeWord), [wakeWord]);
@@ -278,7 +300,8 @@ export function RecepcionLayout({ children }: { children?: ReactNode }) {
   const { supported, listening, error: voiceError } = useWakeWordListening({
     wakeWord,
     lang: recognitionLang,
-    paused: busy || ttsActive || needsMandatoryPasswordSetup,
+    paused: needsMandatoryPasswordSetup,
+    ttsActive,
     onCommand: (t) => void sendRef.current(t),
   });
 

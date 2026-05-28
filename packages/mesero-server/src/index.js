@@ -20,7 +20,7 @@ import {
 import { fetchCommercialOfferings, isCommercialOfferingsConfigured } from "./aiboxOfferings.js";
 import { catalogSource, getResolvedCatalog, invalidateCatalogCache } from "./menuCatalog.js";
 import { getOfferingImage } from "./offeringImageStore.js";
-import { filterAmbiguousMenuLines, inferMenuLinesFromText, mergeDraftItemLists } from "./orderAmbiguity.js";
+import { filterAmbiguousMenuLines, findAmbiguousProductGroups, inferMenuLinesFromText, mergeDraftItemLists } from "./orderAmbiguity.js";
 import {
   buildConversationPhaseHint,
   buildWaiterHospitalityBlock,
@@ -801,14 +801,56 @@ function lastUserMessageContent(messages) {
   return stripWakeWordFromUtterance(raw, resolveWakeWord(store.settings));
 }
 
-/** Texto reciente del cliente para validar DRAFT/ORDER (varios turnos del mismo pedido). */
-function recentUserOrderCorpus(messages, maxTurns = 5) {
+/** Texto del cliente en la conversación activa (para acumular ítems del pedido). */
+function recentUserOrderCorpus(messages, maxTurns = 24) {
   const wake = resolveWakeWord(store.settings);
   return messages
     .filter((m) => m.role === "user")
     .slice(-maxTurns)
     .map((m) => stripWakeWordFromUtterance(String(m.content ?? ""), wake))
     .join(" ");
+}
+
+function foldCorpusText(s) {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Incluir último mensaje del asistente cuando el cliente elige variante («la de 500 ml», «esa»). */
+function shouldIncludeAssistantForOrderInference(lastUser, lastAssistant) {
+  const u = foldCorpusText(lastUser);
+  const a = foldCorpusText(lastAssistant);
+  if (!u || !a || u.length > 120) return false;
+  if (/\b(esa|ese|esa misma|el de|la de|la misma|ese mismo|s[ií]|ok|dale|listo|perfecto|de acuerdo|agrega esa|ponme esa)\b/.test(u)) {
+    return true;
+  }
+  if (/\b\d+(?:[.,]\d+)?\s*(?:ml|litros?|l)\b/.test(u) && /\b(ml|litro|zero|light|grande|pequeñ)/.test(a)) {
+    return true;
+  }
+  if (/\b(zero|light|original|sabor|tamaño|tamanio|mediana|grande|pequeña|pequena)\b/.test(u) && u.length < 50) {
+    return true;
+  }
+  return false;
+}
+
+function orderCorpusForInference(messages) {
+  const userCorpus = recentUserOrderCorpus(messages);
+  const wake = resolveWakeWord(store.settings);
+  const users = messages.filter((m) => m.role === "user");
+  const lastUser = stripWakeWordFromUtterance(String(users[users.length - 1]?.content ?? ""), wake);
+  const assistants = messages.filter((m) => m.role === "assistant");
+  const lastAssist = String(assistants[assistants.length - 1]?.content ?? "")
+    .replace(/<<<[\s\S]*?>>>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!shouldIncludeAssistantForOrderInference(lastUser, lastAssist)) return userCorpus;
+  const snippet = lastAssist.slice(0, 320);
+  return `${userCorpus} ${snippet}`.replace(/\s+/g, " ").trim();
 }
 
 function isShortEnglishGreeting(text) {
@@ -1005,8 +1047,8 @@ async function generateAssistantChatContent(messages, menu, { selectedTable, kit
     body: JSON.stringify({
       model,
       messages: [{ role: "system", content: system }, ...messages],
-      temperature: 0.7,
-      max_tokens: 280,
+      temperature: 0.55,
+      max_tokens: 180,
     }),
   });
   if (!r.ok) {
@@ -1127,7 +1169,9 @@ Si el cliente pregunta cómo va su pedido, si está listo, en preparación, etc.
   return `Eres el mesero virtual de "${store.settings.restaurantName}".
 Te presentas como ${wakeLabel} (mesero/a virtual). En el quiosco el cliente activa el micrófono diciendo la palabra «${wakeLabel}» antes de su pedido.
 
-BIENVENIDA (primer turno o solo saludo): responde con calidez de restaurante — «¡Buenas! Bienvenidos a ${store.settings.restaurantName}», preséntate como ${wakeLabel}, di que es un gusto atenderles y pregunta si quieren recomendación o ya saben qué pedir. No uses «Bienvenido/a» ni barras; no uses frases frías como «¿en qué te puedo ayudar?».
+BIENVENIDA (primer turno o solo saludo): saludo breve — «¡Buenas! Bienvenidos a ${store.settings.restaurantName}», preséntate como ${wakeLabel} y pregunta si quieren recomendación o ya saben qué pedir. Máximo 2 frases. No uses «Bienvenido/a» ni barras; no uses frases frías como «¿en qué te puedo ayudar?».
+
+LÍMITE DE LONGITUD (visible al cliente): máximo 2 frases cortas por turno. Los bloques DRAFT_JSON y ORDER_JSON al final no cuentan para ese límite.
 
 MENÚ por categorías (usa los ids entre corchetes solo al registrar pedidos internamente; al hablar con el cliente usa nombres naturales):
 ${menuText}${scopeNote}${stockRule}
@@ -1150,8 +1194,8 @@ ${priceRule}${kitchenBlock}
 
 Mientras el cliente arma el pedido SIN confirmación final, incluye SIEMPRE al final (después de tu mensaje visible) un bloque:
 <<<DRAFT_JSON>>>{"items":[{"menuItemId":"id-del-menu","qty":1,"notes":""}]}<<<END_DRAFT_JSON>>>
-con TODOS los platos que el cliente pidió o aceptó en este pedido en construcción. Usa el menuItemId exacto del menú de arriba (el id entre corchetes) que corresponda al nombre del plato que mencionó el cliente — no inventes ids ni confundas platos (ej. si pidió habas/choclo, no pongas arroz). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó.
-IMPORTANTE — productos con variantes: si el cliente pide algo genérico (ej. «una coca cola», «una cerveza») y en el menú hay varias opciones (lata, zero, 500 ml, etc.), NO pongas todas en DRAFT_JSON. Deja {"items":[]} y pregunta en voz cuál prefiere (tamaño, sabor, presentación). Solo agrega UNA línea cuando el cliente ya especificó la variante o eligió una de tus opciones.
+con TODOS los platos que el cliente pidió o aceptó en este pedido en construcción. Usa el menuItemId exacto del menú de arriba (el id entre corchetes) que corresponda al nombre del plato que mencionó el cliente — no inventes ids ni confundas platos (ej. si pidió habas/choclo, no pongas arroz). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó. Si el cliente solo pregunta qué lleva su pedido o pide un resumen, NO agregues platos nuevos al DRAFT_JSON: repite en voz lo ya pedido y deja el mismo DRAFT_JSON (o {"items":[]} si aún no pidió nada).
+IMPORTANTE — productos con variantes: si el cliente pide algo genérico (ej. «una cola», «una coca cola», «una cerveza») y en el menú hay varias opciones (500 ml, 1.35 L, zero, etc.), NO pongas ninguna variante en DRAFT_JSON. Pregunta en voz cuál prefiere nombrando 2-3 opciones concretas del menú (tamaño o sabor). Solo agrega UNA línea cuando el cliente ya especificó la variante o eligió una de tus opciones.
 
 Para registrar un pedido confirmado, cuando el cliente confirme explícitamente, incluye al final un bloque JSON en una sola línea con este formato exacto:
 <<<ORDER_JSON>>>{"table":"Mesa X o vacío","items":[{"menuItemId":"m1","qty":2,"notes":"sin cebolla"}],"notes":"notas generales"}<<<END_ORDER_JSON>>>
@@ -2087,7 +2131,7 @@ app.post("/api/chat/complete", async (req, res) => {
   }
 
   const lastUser = lastUserMessageContent(messages);
-  const orderCorpus = recentUserOrderCorpus(messages);
+  const orderCorpus = orderCorpusForInference(messages);
   let content = "";
   try {
     content = await generateAssistantChatContent(messages, menu, { selectedTable, kitchenOrderIds, appMode });
@@ -2099,6 +2143,7 @@ app.post("/api/chat/complete", async (req, res) => {
   }
 
   let draftItems = [];
+  let draftAmbiguous = [];
   if (appMode !== "reception") {
     const draftExtract = extractTaggedJsonBlock(content, "DRAFT");
     content = draftExtract.content;
@@ -2119,11 +2164,12 @@ app.post("/api/chat/complete", async (req, res) => {
         draftItems = [];
       }
     }
-    draftItems = mergeDraftItemLists(
-      draftItems,
-      inferMenuLinesFromText(orderCorpus, menu),
-      inferMenuLinesFromText(content, menu),
-    );
+    // Solo DRAFT_JSON + lo que dijo el cliente; no inferir del texto visible del asistente (evita llenar el pedido al listar el menú).
+    draftItems = mergeDraftItemLists(draftItems, inferMenuLinesFromText(orderCorpus, menu));
+    draftAmbiguous = findAmbiguousProductGroups(lastUser, menu);
+    if (draftAmbiguous.length === 0) {
+      draftAmbiguous = findAmbiguousProductGroups(orderCorpus, menu);
+    }
   }
 
   let order = null;
@@ -2226,6 +2272,7 @@ app.post("/api/chat/complete", async (req, res) => {
     role: "assistant",
     content: visible,
     draftItems,
+    draftAmbiguous,
     order,
     paymentFlow: paymentFlow
       ? {

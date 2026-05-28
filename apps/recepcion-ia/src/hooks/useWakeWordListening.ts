@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AUDIO_INPUT_KEY } from "../lib/audioDevices";
-import { extractCommandIfWakeAtStart } from "../lib/wakeWord";
+import { parseWakeSpeechFragment } from "../lib/wakeWord";
 
 interface SpeechRecAlternative {
   readonly transcript: string;
@@ -56,9 +56,14 @@ function getRecognitionCtor(): RecCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-const POST_PAUSE_COOLDOWN_MS = 2800;
-const DEDUPE_MS = 2000;
+const POST_PAUSE_COOLDOWN_MS = 900;
+const DEDUPE_MS = 1200;
 const MIN_COMMAND_LEN = 2;
+const CHUNK_MERGE_MS = 750;
+
+function wakeLog(...args: unknown[]) {
+  if (import.meta.env.DEV) console.debug("[wake]", ...args);
+}
 
 async function warmMicrophoneOnce() {
   if (!navigator.mediaDevices?.getUserMedia) return;
@@ -80,7 +85,10 @@ async function warmMicrophoneOnce() {
 export type WakeListenOpts = {
   wakeWord?: string;
   lang?: string;
+  /** Pausa dura: apaga el micrófono (p. ej. falta contraseña). */
   paused: boolean;
+  /** Bot hablando: micrófono sigue activo pero se difieren comandos para evitar eco. */
+  ttsActive?: boolean;
   onCommand: (textAfterWake: string) => void | Promise<void>;
 };
 
@@ -90,6 +98,7 @@ export type WakeListenOpts = {
 export function useWakeWordListening(opts: WakeListenOpts) {
   const onCommandRef = useRef(opts.onCommand);
   const pausedRef = useRef(opts.paused);
+  const ttsActiveRef = useRef(opts.ttsActive ?? false);
   const wakeRef = useRef(opts.wakeWord ?? "karen");
   const langRef = useRef(opts.lang ?? "es-ES");
   const hiddenRef = useRef(false);
@@ -99,6 +108,7 @@ export function useWakeWordListening(opts: WakeListenOpts) {
     onCommandRef.current = opts.onCommand;
   }, [opts.onCommand]);
   pausedRef.current = opts.paused;
+  ttsActiveRef.current = opts.ttsActive ?? false;
   wakeRef.current = opts.wakeWord ?? "karen";
   langRef.current = opts.lang ?? "es-ES";
 
@@ -109,8 +119,12 @@ export function useWakeWordListening(opts: WakeListenOpts) {
 
   const recRef = useRef<SpeechRecognitionInstance | null>(null);
   const postPauseCooldownUntilRef = useRef(0);
+  const armedUntilRef = useRef(0);
   const lastFiredRef = useRef({ text: "", at: 0 });
-  const wasPausedRef = useRef(opts.paused);
+  const chunkBufferRef = useRef("");
+  const chunkMergeTimerRef = useRef(0);
+  const deferredCommandRef = useRef<string | null>(null);
+  const wasTtsRef = useRef(opts.ttsActive ?? false);
   const shuttingDownRef = useRef(false);
   const warmedRef = useRef(false);
   const restartTimerRef = useRef(0);
@@ -160,28 +174,94 @@ export function useWakeWordListening(opts: WakeListenOpts) {
   }, [clearRestart]);
 
   useEffect(() => {
-    if (wasPausedRef.current && !opts.paused) {
-      postPauseCooldownUntilRef.current = Date.now() + POST_PAUSE_COOLDOWN_MS;
+    if (opts.paused) {
+      armedUntilRef.current = 0;
+      chunkBufferRef.current = "";
+      deferredCommandRef.current = null;
+      if (chunkMergeTimerRef.current) window.clearTimeout(chunkMergeTimerRef.current);
+      chunkMergeTimerRef.current = 0;
     }
-    wasPausedRef.current = opts.paused;
   }, [opts.paused]);
 
-  const processFinalUtterance = useCallback((chunk: string) => {
-    if (pausedRef.current || hiddenRef.current) return;
-    if (Date.now() < postPauseCooldownUntilRef.current) return;
-
-    const t = chunk.trim();
-    if (!t) return;
-    const w = wakeRef.current || "karen";
-    const command = extractCommandIfWakeAtStart(t, w, MIN_COMMAND_LEN);
-    if (!command) return;
-
+  const fireCommand = useCallback((command: string) => {
     const now = Date.now();
     const last = lastFiredRef.current;
-    if (last.text === command && now - last.at < DEDUPE_MS) return;
+    if (last.text === command && now - last.at < DEDUPE_MS) {
+      wakeLog("deduped", command);
+      return;
+    }
     lastFiredRef.current = { text: command, at: now };
+    wakeLog("command", command);
     void Promise.resolve(onCommandRef.current(command)).catch(() => null);
   }, []);
+
+  const flushDeferredCommand = useCallback(() => {
+    const cmd = deferredCommandRef.current?.trim();
+    deferredCommandRef.current = null;
+    if (cmd) fireCommand(cmd);
+  }, [fireCommand]);
+
+  useEffect(() => {
+    const wasTts = wasTtsRef.current;
+    const isTts = opts.ttsActive ?? false;
+    wasTtsRef.current = isTts;
+    if (wasTts && !isTts) {
+      postPauseCooldownUntilRef.current = Date.now() + POST_PAUSE_COOLDOWN_MS;
+      wakeLog("tts ended, cooldown", POST_PAUSE_COOLDOWN_MS);
+      window.setTimeout(() => {
+        flushDeferredCommand();
+        if (!pausedRef.current && !hiddenRef.current && slotRef.current === 1) {
+          stopRec();
+          window.setTimeout(() => startRecRef.current(), 250);
+        }
+      }, POST_PAUSE_COOLDOWN_MS);
+    }
+  }, [opts.ttsActive, flushDeferredCommand, stopRec]);
+
+  const processBufferedUtterance = useCallback(
+    (chunk: string) => {
+      if (pausedRef.current || hiddenRef.current) return;
+
+      const w = wakeRef.current || "karen";
+      const parsed = parseWakeSpeechFragment(chunk, w, armedUntilRef.current, MIN_COMMAND_LEN);
+      armedUntilRef.current = parsed.armedUntil;
+      wakeLog("chunk", chunk, parsed.result);
+
+      if (parsed.result.kind !== "command") return;
+
+      const command = parsed.result.command;
+      if (ttsActiveRef.current) {
+        deferredCommandRef.current = command;
+        wakeLog("deferred (tts)", command);
+        return;
+      }
+      if (Date.now() < postPauseCooldownUntilRef.current) {
+        deferredCommandRef.current = command;
+        wakeLog("deferred (cooldown)", command);
+        return;
+      }
+      fireCommand(command);
+    },
+    [fireCommand],
+  );
+
+  const flushChunkBuffer = useCallback(() => {
+    chunkMergeTimerRef.current = 0;
+    const merged = chunkBufferRef.current.trim();
+    chunkBufferRef.current = "";
+    if (merged) processBufferedUtterance(merged);
+  }, [processBufferedUtterance]);
+
+  const enqueueFinalChunk = useCallback(
+    (chunk: string) => {
+      const t = chunk.trim();
+      if (!t) return;
+      chunkBufferRef.current = chunkBufferRef.current ? `${chunkBufferRef.current} ${t}`.trim() : t;
+      if (chunkMergeTimerRef.current) window.clearTimeout(chunkMergeTimerRef.current);
+      chunkMergeTimerRef.current = window.setTimeout(flushChunkBuffer, CHUNK_MERGE_MS);
+    },
+    [flushChunkBuffer],
+  );
 
   const enterCooldown = useCallback(() => {
     stopRec();
@@ -231,7 +311,8 @@ export function useWakeWordListening(opts: WakeListenOpts) {
           if (!r.isFinal) continue;
           const t = (r[0]?.transcript ?? "").trim();
           if (!t) continue;
-          processFinalUtterance(t);
+          wakeLog("heard", t, { tts: ttsActiveRef.current });
+          enqueueFinalChunk(t);
         }
       };
 
@@ -261,7 +342,7 @@ export function useWakeWordListening(opts: WakeListenOpts) {
         scheduleRestart();
       };
     },
-    [processFinalUtterance, scheduleRestart],
+    [enqueueFinalChunk, scheduleRestart],
   );
 
   const startRec = useCallback(() => {
@@ -373,5 +454,25 @@ export function useWakeWordListening(opts: WakeListenOpts) {
     setError(null);
   }, []);
 
-  return { supported, listening: sessionActive, error, clearError };
+  const activateMicrophone = useCallback(async () => {
+    if (!supported) return false;
+    fatalErrorRef.current = false;
+    setError(null);
+    await warmMicrophoneOnce();
+    warmedRef.current = true;
+    if (pausedRef.current || hiddenRef.current || slotRef.current !== 1) return true;
+    stopRec();
+    clearRestart();
+    startingRef.current = false;
+    restartTimerRef.current = window.setTimeout(() => startRecRef.current(), 400);
+    return true;
+  }, [supported, stopRec, clearRestart]);
+
+  useEffect(() => {
+    const onMicOk = () => void activateMicrophone();
+    window.addEventListener("mesero-mic-authorized", onMicOk);
+    return () => window.removeEventListener("mesero-mic-authorized", onMicOk);
+  }, [activateMicrophone]);
+
+  return { supported, listening: sessionActive, error, clearError, activateMicrophone };
 }

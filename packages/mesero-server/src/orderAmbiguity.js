@@ -191,3 +191,99 @@ export function filterAmbiguousMenuLines(lines, menu, userText, opts = {}) {
   if (validated.length <= 1) return validated;
   return resolveAmbiguousGroups(validated, menu, hay);
 }
+
+function sizeHintsInHay(name, hay) {
+  const nm = fold(name);
+  const ml = nm.match(/\b(\d+(?:[.,]\d+)?)\s*ml\b/);
+  if (ml && new RegExp(`\\b${ml[1].replace(".", "[.,]")}\\s*ml\\b`, "i").test(hay)) return true;
+  const lit = nm.match(/\b(\d+(?:[.,]\d+)?)\s*litros?\b/);
+  if (lit && new RegExp(`\\b${lit[1].replace(".", "[.,]")}\\s*(?:litros?|l)\\b`, "i").test(hay)) return true;
+  return false;
+}
+
+/** Pedidos genéricos («una cola») que abarcan varias variantes del menú. */
+const GENERIC_PRODUCT_HINTS = [
+  {
+    label: "Gaseosa",
+    re: /\b(cola|coca\s*cola|cocacola|gaseosa|refresco|soda)\b/i,
+    matchItem: (name) => /\b(coca|cola|pepsi|fiora|gaseosa|refresco|vanti)\b/i.test(fold(name)),
+  },
+  {
+    label: "Cerveza",
+    re: /\b(cerveza|beer)\b/i,
+    matchItem: (name) => /\b(cerveza|beer|pilsener|club)\b/i.test(fold(name)),
+  },
+];
+
+function findGenericAmbiguousGroups(hay, menu) {
+  if (!hay) return [];
+  const out = [];
+  for (const hint of GENERIC_PRODUCT_HINTS) {
+    if (!hint.re.test(hay)) continue;
+    const options = menu.filter((m) => m.available !== false && hint.matchItem(m.name));
+    if (options.length <= 1) continue;
+    const fullHits = options.filter((m) => fullNameInHay(m.name, hay));
+    if (fullHits.length === 1) continue;
+    const sizePicks = options.filter((m) => sizeHintsInHay(m.name, hay));
+    if (sizePicks.length === 1) continue;
+    out.push({ label: hint.label, options: options.map((m) => m.name) });
+  }
+  return out;
+}
+
+/**
+ * Grupos de producto que el cliente mencionó pero sin variante clara (ej. «una cola» con varias Coca-Colas).
+ * @returns {Array<{ label: string; options: string[] }>}
+ */
+export function findAmbiguousProductGroups(userText, menu) {
+  const hay = expandedHay(userText);
+  if (!hay) return [];
+
+  const matched = [];
+  for (const m of menu) {
+    if (m.available === false) continue;
+    if (lineMatchesUserText(m, hay)) matched.push(m);
+  }
+
+  const partial = matched.filter((m) => !fullNameInHay(m.name, hay));
+  const groups = new Map();
+  for (const m of partial) {
+    const sig = matchedTokenSignature(m.name, hay);
+    if (!sig) continue;
+    const g = groups.get(sig) ?? [];
+    g.push(m);
+    groups.set(sig, g);
+  }
+
+  const out = [];
+  for (const items of groups.values()) {
+    if (items.length <= 1) continue;
+
+    const sizePicks = items.filter((m) => sizeHintsInHay(m.name, hay));
+    if (sizePicks.length === 1) continue;
+
+    const exclusivePicks = items.filter((m) => {
+      const tokens = significantTokens(m.name);
+      const matchedToks = tokens.filter((t) => tokenInHay(hay, t));
+      const exclusive = matchedToks.filter((t) =>
+        items.every((other) => other.id === m.id || !significantTokens(other.name).includes(t)),
+      );
+      return exclusive.length > 0;
+    });
+    if (exclusivePicks.length === 1) continue;
+
+    const label =
+      items[0].name.split(/\s+/).slice(0, 2).join(" ").trim() ||
+      significantTokens(items[0].name).slice(0, 2).join(" ");
+    out.push({
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      options: items.map((m) => m.name),
+    });
+  }
+
+  const generic = findGenericAmbiguousGroups(hay, menu);
+  for (const g of generic) {
+    if (!out.some((x) => x.label === g.label)) out.push(g);
+  }
+  return out;
+}

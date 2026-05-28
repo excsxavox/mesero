@@ -6,6 +6,7 @@ import {
   orderTotal,
   lineSubtotal,
   type ConfirmedBundle,
+  type DraftAmbiguousGroup,
   type DraftLineInput,
 } from "../../lib/orderDisplayLines";
 import { orderStatusBadgeClass, orderStatusLabel } from "../../lib/orderStatusLabels";
@@ -15,8 +16,7 @@ type Props = {
   menu: MenuItem[];
   corpus: string;
   pendingDraft?: DraftLineInput[];
-  /** Resumen reciente del asistente (para detectar platos mencionados en voz). */
-  assistantSummary?: string;
+  pendingAmbiguous?: DraftAmbiguousGroup[];
   touchCart?: Record<string, number>;
   confirmed: ConfirmedBundle[];
   busy?: boolean;
@@ -78,7 +78,7 @@ export function OrderSummaryCard({
   menu,
   corpus,
   pendingDraft,
-  assistantSummary,
+  pendingAmbiguous,
   touchCart,
   confirmed,
   busy,
@@ -88,8 +88,8 @@ export function OrderSummaryCard({
 }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const lines = useMemo(
-    () => mergedActiveLines(menu, corpus, touchCart, pendingDraft, assistantSummary),
-    [menu, corpus, touchCart, pendingDraft, assistantSummary],
+    () => mergedActiveLines(menu, corpus, touchCart, pendingDraft),
+    [menu, corpus, touchCart, pendingDraft],
   );
   const total = orderTotal(lines);
   const menuById = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
@@ -101,7 +101,11 @@ export function OrderSummaryCard({
     [confirmed],
   );
 
-  const showDraftSection = lines.length > 0 || busy || (pendingDraft?.length ?? 0) > 0;
+  const showDraftSection =
+    lines.length > 0 ||
+    busy ||
+    (pendingDraft?.length ?? 0) > 0 ||
+    (pendingAmbiguous?.length ?? 0) > 0;
 
   return (
     <section className="order-summary-panel flex flex-col rounded-2xl border border-mesero-muted bg-mesero-panel p-4">
@@ -133,6 +137,22 @@ export function OrderSummaryCard({
           ) : (
             <p className="text-sm text-mesero-text-muted/80">Di el plato concreto para verlo aquí.</p>
           )}
+          {(pendingAmbiguous?.length ?? 0) > 0 ? (
+            <ul className="mt-3 space-y-2 border-t border-mesero-line/10 pt-2">
+              {pendingAmbiguous!.map((g) => (
+                <li
+                  key={g.label}
+                  className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-2.5 py-2 text-xs text-amber-100/90"
+                >
+                  <p className="font-semibold text-amber-200/90">Por especificar: {g.label}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-amber-100/70">
+                    Elige: {g.options.slice(0, 4).join(" · ")}
+                    {g.options.length > 4 ? "…" : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {total != null && lines.length > 0 ? (
             <div className="mt-3 text-center">
               <p className="text-[11px] font-medium uppercase tracking-wide text-mesero-text-muted">Total estimado</p>

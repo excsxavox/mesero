@@ -25,7 +25,7 @@ export function VoiceOrb({ assistantName, busy, ttsActive, listening, supported 
     : ttsActive
       ? "Escucha la respuesta"
       : micWaiting
-        ? `Di «${assistantName}» al inicio para pedir (no responde sin su nombre)`
+        ? `Di «${assistantName}» y tu pedido (puedes decir el nombre y luego el plato)`
         : supported
           ? "El micrófono se reanuda en un momento"
           : "Este navegador no soporta reconocimiento de voz";

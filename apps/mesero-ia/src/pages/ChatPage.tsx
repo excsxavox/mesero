@@ -42,8 +42,10 @@ export function ChatPage() {
     confirmed,
     setConfirmed,
     pendingDraft,
+    pendingAmbiguous,
     orderDraftCorpus,
     orderInferenceCorpus,
+    registerOrderMenu,
     clearOrder,
     clearConversation,
     sendWithText,
@@ -58,6 +60,10 @@ export function ChatPage() {
   const { companyName: profileCompanyName } = useAuth();
 
   const { menu } = useRefreshableMenu();
+
+  useEffect(() => {
+    registerOrderMenu(menu);
+  }, [menu, registerOrderMenu]);
   const [input, setInput] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [lockArmed, setLockArmed] = useState(() => isAdminExitLockArmed());
@@ -452,7 +458,7 @@ export function ChatPage() {
                 menu={menu}
                 corpus={orderInferenceCorpus}
                 pendingDraft={pendingDraft}
-                assistantSummary={lastAssistantText}
+                pendingAmbiguous={pendingAmbiguous}
                 touchCart={touchCart}
                 confirmed={confirmed}
                 busy={busy}
@@ -528,7 +534,6 @@ export function ChatPage() {
           ) : null}
         </footer>
       </div>
-
     </div>
   );
 }

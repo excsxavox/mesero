@@ -121,7 +121,11 @@ export async function refreshTokensRequest(refreshToken: string): Promise<AuthSe
     profile?: AuthProfile | null;
     error?: string;
   };
-  if (!r.ok || !body.accessToken) return null;
+  if (!r.ok || !body.accessToken) {
+    // Servidor caído o reiniciando: no borrar sesión local.
+    if (r.status === 502 || r.status === 503 || r.status === 504) return readRawSession();
+    return null;
+  }
 
   const prev = readRawSession();
   const next: AuthSession = {

@@ -14,6 +14,7 @@ import { preloadSpeechVoices, speakTextAsync, stopSpeaking } from "../hooks/useV
 import { useStableRecognitionLang } from "../hooks/useStableRecognitionLang";
 import { useOrderStatusSync } from "../hooks/useOrderStatusSync";
 import { useWakeWordListening } from "../hooks/useWakeWordListening";
+import { useLocalOrderDraftSync } from "../hooks/useLocalOrderDraftSync";
 import { chatComplete, getSettings } from "../lib/api";
 import {
   loadMeseroSession,
@@ -22,9 +23,10 @@ import {
   type MeseroMsg,
 } from "../lib/meseroSessionStorage";
 import { speechLocaleFromConversation } from "../lib/speechLocale";
-import type { ConfirmedBundle, DraftLineInput } from "../lib/orderDisplayLines";
-import { buildOrderInferenceCorpus, mergeDraftInputs } from "../lib/orderDisplayLines";
-import type { Settings } from "../lib/types";
+import type { ConfirmedBundle, DraftAmbiguousGroup, DraftLineInput } from "../lib/orderDisplayLines";
+import { mergeDraftInputs } from "../lib/orderDisplayLines";
+import { buildOrderInferenceCorpusForDraft, buildUserOrderCorpus } from "../lib/orderDraftCorpus";
+import type { MenuItem, Settings } from "../lib/types";
 import { applyKioskTableFromUrl } from "../lib/kioskTable";
 import { clampSelectedTable, formatTableLabel, normalizeTableCount } from "../lib/tables";
 import { displayAssistantName, normalizeWakeWord } from "../lib/wakeWord";
@@ -53,9 +55,11 @@ type MeseroContextValue = {
   setConfirmed: React.Dispatch<React.SetStateAction<ConfirmedBundle[]>>;
   /** Borrador devuelto por Karen (DRAFT_JSON) en el último turno. */
   pendingDraft: DraftLineInput[];
-  /** Texto del cliente desde el último pedido confirmado (evita arrastrar platos viejos). */
+  /** Productos mencionados sin variante clara (ej. «una cola»). */
+  pendingAmbiguous: DraftAmbiguousGroup[];
+  /** Texto del cliente desde el último pedido confirmado (sin wake word). */
   orderDraftCorpus: string;
-  /** Cliente + resumen del mesero para inferir líneas en pantalla. */
+  /** Corpus ampliado para inferir platos (cliente + último turno del mesero al elegir variante). */
   orderInferenceCorpus: string;
   clearOrder: () => void;
   clearConversation: () => void;
@@ -69,6 +73,8 @@ type MeseroContextValue = {
   assignKioskTable: (table: number) => void;
   tableLabel: string | null;
   registerOrderToast: (fn: ((msg: string) => void) | null) => void;
+  /** Registra el menú cargado para sincronizar el borrador con lo que dice el cliente. */
+  registerOrderMenu: (menu: MenuItem[]) => void;
   refreshSettings: () => Promise<void>;
 };
 
@@ -88,13 +94,21 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   const [touchCart, setTouchCart] = useState<Record<string, number>>(initial.touchCart);
   const [confirmed, setConfirmed] = useState<ConfirmedBundle[]>([]);
   const [pendingDraft, setPendingDraft] = useState<DraftLineInput[]>([]);
+  const [pendingAmbiguous, setPendingAmbiguous] = useState<DraftAmbiguousGroup[]>([]);
   const [draftEpochMs, setDraftEpochMs] = useState(0);
+  const [syncMenu, setSyncMenu] = useState<MenuItem[]>([]);
   const [selectedTable, setSelectedTableState] = useState<number | null>(() =>
     clampSelectedTable(initial.selectedTable ?? null, normalizeTableCount(undefined)),
   );
   const [busy, setBusy] = useState(false);
   const [ttsActive, setTtsActive] = useState(false);
+  const busyRef = useRef(false);
+  const ttsActiveRef = useRef(false);
+  busyRef.current = busy;
+  ttsActiveRef.current = ttsActive;
   const orderToastRef = useRef<((msg: string) => void) | null>(null);
+  const sendRef = useRef<(raw: string) => Promise<void>>(async () => {});
+  const pendingVoiceRef = useRef<string | null>(null);
   const confirmedRef = useRef(confirmed);
   confirmedRef.current = confirmed;
 
@@ -121,25 +135,6 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   useOrderStatusSync(confirmedOrderIds, applyOrderStatusPatches);
 
   const needsMandatoryPasswordSetup = Boolean(settings && !settings.adminExitPasswordConfigured);
-
-  const orderDraftCorpus = useMemo(() => {
-    const users = messages.filter((m) => m.role === "user");
-    const scoped = draftEpochMs
-      ? users.filter((m) => {
-          if (!m.at) return true;
-          return new Date(m.at).getTime() > draftEpochMs;
-        })
-      : users;
-    return scoped.map((m) => m.content).join(" ");
-  }, [messages, draftEpochMs]);
-
-  const orderInferenceCorpus = useMemo(() => {
-    const assist = messages
-      .filter((m) => m.role === "assistant")
-      .slice(-3)
-      .map((m) => m.content);
-    return buildOrderInferenceCorpus(orderDraftCorpus, assist);
-  }, [messages, orderDraftCorpus]);
 
   const tableCount = useMemo(
     () => normalizeTableCount(settings?.tableCount),
@@ -183,18 +178,6 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     };
   }, [tableCount]);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      saveMeseroSession({
-        touchCart,
-        corpus: orderDraftCorpus,
-        messages,
-        selectedTable,
-      });
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [touchCart, orderDraftCorpus, messages, selectedTable]);
-
   const refreshSettings = useCallback(async () => {
     try {
       const s = await getSettings();
@@ -235,6 +218,40 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
 
   const wakeWord = useMemo(() => normalizeWakeWord(settings?.wakeWord), [settings?.wakeWord]);
 
+  const orderDraftCorpus = useMemo(
+    () => buildUserOrderCorpus(messages, draftEpochMs, wakeWord),
+    [messages, draftEpochMs, wakeWord],
+  );
+
+  const orderInferenceCorpus = useMemo(
+    () => buildOrderInferenceCorpusForDraft(messages, draftEpochMs, wakeWord),
+    [messages, draftEpochMs, wakeWord],
+  );
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      saveMeseroSession({
+        touchCart,
+        corpus: orderDraftCorpus,
+        messages,
+        selectedTable,
+      });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [touchCart, orderDraftCorpus, messages, selectedTable]);
+
+  useLocalOrderDraftSync(syncMenu, {
+    messages,
+    draftEpochMs,
+    wakeWord,
+    setPendingDraft,
+    setPendingAmbiguous,
+  });
+
+  const registerOrderMenu = useCallback((menu: MenuItem[]) => {
+    setSyncMenu(menu);
+  }, []);
+
   const playAssistantVoice = useCallback(
     (content: string, messagesForLocale: MeseroMsg[]) => {
       setTtsActive(true);
@@ -253,6 +270,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     setTouchCart({});
     setConfirmed([]);
     setPendingDraft([]);
+    setPendingAmbiguous([]);
     setDraftEpochMs(Date.now());
     setMessages((m) => m.filter((x) => x.role !== "user"));
   }, []);
@@ -263,8 +281,17 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     setTouchCart({});
     setConfirmed([]);
     setPendingDraft([]);
+    setPendingAmbiguous([]);
     setDraftEpochMs(0);
     setMessages([]);
+  }, []);
+
+  const flushPendingVoice = useCallback(() => {
+    const pending = pendingVoiceRef.current?.trim();
+    if (!pending) return;
+    if (busyRef.current || ttsActiveRef.current) return;
+    pendingVoiceRef.current = null;
+    window.setTimeout(() => void sendRef.current(pending), 400);
   }, []);
 
   const sendWithText = useCallback(
@@ -272,9 +299,9 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
       if (needsMandatoryPasswordSetup) return;
       const text = raw.trim();
       if (!text) return;
-      if (busy) {
+      if (busyRef.current || ttsActiveRef.current) {
         pendingVoiceRef.current = text;
-        orderToastRef.current?.("Un momento, estoy respondiendo…");
+        if (busyRef.current) orderToastRef.current?.("Un momento, estoy respondiendo…");
         return;
       }
       const next: MeseroMsg[] = [...messages, { role: "user", content: text, at: new Date().toISOString() }];
@@ -292,7 +319,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         setMessages((m) => [...m, { role: "assistant", content: res.content, at: new Date().toISOString() }]);
         playAssistantVoice(res.content, next);
         if (Array.isArray(res.draftItems) && res.draftItems.length > 0) {
-          const incoming = res.draftItems.map((it) => ({
+          const incoming: DraftLineInput[] = res.draftItems.map((it) => ({
             menuItemId: it.menuItemId,
             name: it.name,
             qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
@@ -300,12 +327,18 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
           setPendingDraft((prev) => mergeDraftInputs(prev, incoming));
           setTouchCart({});
         }
+        if (Array.isArray(res.draftAmbiguous) && res.draftAmbiguous.length > 0) {
+          setPendingAmbiguous(res.draftAmbiguous);
+        } else if (Array.isArray(res.draftItems) && res.draftItems.length > 0) {
+          setPendingAmbiguous([]);
+        }
         if (res.paymentFlow?.phase === "ready") {
           orderToastRef.current?.("Cuenta enviada a caja con datos de facturación.");
         }
         if (res.order) {
           setTouchCart({});
           setPendingDraft([]);
+          setPendingAmbiguous([]);
           setDraftEpochMs(Date.now());
           setConfirmed((c) => [
             {
@@ -329,15 +362,18 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
       } finally {
         window.clearTimeout(timeoutId);
         setBusy(false);
-        const pending = pendingVoiceRef.current?.trim();
-        if (pending) {
-          pendingVoiceRef.current = null;
-          window.setTimeout(() => void sendRef.current(pending), 400);
-        }
+        window.setTimeout(flushPendingVoice, 450);
       }
     },
-    [busy, messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable],
+    [messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable, flushPendingVoice],
   );
+
+  sendRef.current = sendWithText;
+
+  useEffect(() => {
+    if (busy || ttsActive) return;
+    flushPendingVoice();
+  }, [busy, ttsActive, flushPendingVoice]);
 
   useEffect(() => {
     if (!busy) return;
@@ -350,17 +386,14 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     return () => window.clearTimeout(t);
   }, [busy]);
 
-  const sendRef = useRef(sendWithText);
-  sendRef.current = sendWithText;
-  const pendingVoiceRef = useRef<string | null>(null);
-
   const recognitionLang = useStableRecognitionLang(messages, wakeWord);
   const assistantName = useMemo(() => displayAssistantName(wakeWord), [wakeWord]);
 
   const { supported, listening, error: voiceError, activateMicrophone } = useWakeWordListening({
     wakeWord,
     lang: recognitionLang,
-    paused: busy || ttsActive || needsMandatoryPasswordSetup,
+    paused: needsMandatoryPasswordSetup,
+    ttsActive,
     onCommand: (t) => void sendRef.current(t),
   });
 
@@ -384,6 +417,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     confirmed,
     setConfirmed,
     pendingDraft,
+    pendingAmbiguous,
     orderDraftCorpus,
     orderInferenceCorpus,
     clearOrder,
@@ -399,6 +433,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
     registerOrderToast: (fn) => {
       orderToastRef.current = fn;
     },
+    registerOrderMenu,
     refreshSettings,
   };
 

@@ -221,6 +221,7 @@ export async function chatComplete(
     role: string;
     content: string;
     draftItems?: { menuItemId: string; name: string; qty: number }[];
+    draftAmbiguous?: { label: string; options: string[] }[];
     order: Order | null;
     paymentFlow?: {
       tableNumber: number;

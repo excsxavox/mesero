@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CatalogKarenProfile } from "../components/catalog/CatalogSidebarPanel";
 import { CatalogOrderSummary } from "../components/catalog/CatalogOrderSummary";
@@ -132,11 +132,16 @@ export function CatalogScreenPage() {
     wakeWord,
     orderInferenceCorpus,
     pendingDraft,
+    registerOrderMenu,
   } = useMesero();
   const { theme, toggleTheme } = useMeseroTheme();
   const { companyName: profileCompanyName } = useAuth();
 
   const { menu, menuLoading } = useRefreshableMenu();
+
+  useEffect(() => {
+    registerOrderMenu(menu);
+  }, [menu, registerOrderMenu]);
   const restaurantName =
     profileCompanyName || settings?.restaurantName?.trim() || "Mi restaurante";
   const [search, setSearch] = useState("");
