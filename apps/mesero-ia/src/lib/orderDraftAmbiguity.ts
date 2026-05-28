@@ -75,10 +75,31 @@ function lineMatchesUserText(mi: MenuItem, hay: string) {
   if (tokens.length === 0) return false;
   const matched = tokens.filter((t) => tokenInHay(hay, t));
   if (matched.length === tokens.length) return true;
-  if (tokens.length >= 3 && matched.length >= Math.ceil(tokens.length * 0.75)) return true;
-  if (tokens.length >= 2 && matched.length >= 2) return true;
+
+  const brandTokens = tokens.filter((t) => !/^\d+$/.test(t) && t !== "litros");
+  const brandMatched = brandTokens.filter((t) => tokenInHay(hay, t));
+  if (brandTokens.length >= 2 && brandMatched.length === brandTokens.length) return true;
+
+  if (tokens.length >= 3) {
+    return matched.length >= Math.ceil(tokens.length * 0.75);
+  }
+  if (tokens.length === 2) {
+    return matched.length === 2;
+  }
   if (tokens.length === 1 && matched.length === 1 && tokens[0]!.length >= 4) return true;
   return false;
+}
+
+function uniqueBrandSodaPick(options: MenuItem[], hay: string) {
+  const fioraOpts = options.filter((m) => /\bfiora\b|\bvanti\b/i.test(fold(m.name)));
+  if (fioraOpts.length > 0 && (/\bfiora\b/.test(hay) || /\bvanti\b/.test(hay))) {
+    const picks = fioraOpts.filter((m) => {
+      const bt = significantTokens(m.name).filter((t) => !/^\d+$/.test(t));
+      return bt.filter((t) => tokenInHay(hay, t)).length >= 2;
+    });
+    if (picks.length === 1) return picks[0]!;
+  }
+  return null;
 }
 
 function sizeHintsInHay(name: string, hay: string) {
@@ -93,7 +114,7 @@ function sizeHintsInHay(name: string, hay: string) {
 const GENERIC_PRODUCT_HINTS = [
   {
     label: "Gaseosa",
-    re: /\b(cola|coca\s*cola|cocacola|gaseosa|refresco|soda)\b/i,
+    re: /\b(cola|coca\s*cola|cocacola|gaseosa|refresco|soda|fiora|vanti)\b/i,
     matchItem: (name: string) => /\b(coca|cola|pepsi|fiora|gaseosa|refresco|vanti)\b/i.test(fold(name)),
   },
   {
@@ -120,8 +141,14 @@ function findGenericAmbiguousGroups(hay: string, menu: MenuItem[]) {
     if (!hint.re.test(hay)) continue;
     const options = menu.filter((m) => m.available !== false && hint.matchItem(m.name));
     if (options.length <= 1) continue;
+    if (hint.label === "Gaseosa" && uniqueBrandSodaPick(options, hay)) continue;
     const fullHits = options.filter((m) => fullNameInHay(m.name, hay));
     if (fullHits.length === 1) continue;
+    const brandResolved = options.filter((m) => {
+      const bt = significantTokens(m.name).filter((t) => !/^\d+$/.test(t) && t !== "litros");
+      return bt.length >= 2 && bt.every((t) => tokenInHay(hay, t));
+    });
+    if (brandResolved.length === 1) continue;
     const sizePicks = options.filter((m) => sizeHintsInHay(m.name, hay));
     if (sizePicks.length === 1) continue;
     out.push({ label: hint.label, options: options.map((m) => m.name) });
@@ -178,5 +205,12 @@ export function findAmbiguousProductGroups(userText: string, menu: MenuItem[]): 
   for (const g of findGenericAmbiguousGroups(hay, menu)) {
     if (!out.some((x) => x.label === g.label)) out.push(g);
   }
-  return out;
+
+  return out.filter((g) => {
+    if (g.label !== "Gaseosa") return true;
+    const options = menu.filter(
+      (m) => m.available !== false && /\b(coca|cola|pepsi|fiora|gaseosa|refresco|vanti)\b/i.test(fold(m.name)),
+    );
+    return !uniqueBrandSodaPick(options, hay);
+  });
 }

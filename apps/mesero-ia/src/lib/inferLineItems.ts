@@ -177,6 +177,16 @@ function scoreMenuItem(m: MenuItem, hay: string): { score: number; qty: number }
     return { score: 1000, qty: firstIdx != null && firstIdx >= 0 ? qtyBeforeIndex(hay, firstIdx) : 1 };
   }
 
+  const brandTokens = tokens.filter((t) => !/^\d+$/.test(t) && t !== "litros");
+  const brandMatched = brandTokens.filter((t) => tokenInHay(hay, t));
+  if (brandTokens.length >= 2 && brandMatched.length === brandTokens.length) {
+    const firstIdx = brandMatched
+      .map((t) => hay.search(tokenBoundaryRegex(t)))
+      .filter((i) => i >= 0)
+      .sort((a, b) => a - b)[0];
+    return { score: 1000, qty: firstIdx != null && firstIdx >= 0 ? qtyBeforeIndex(hay, firstIdx) : 1 };
+  }
+
   const cat = fold(m.category ?? "");
   let score = matched.length * 120;
   if (matched.length === tokens.length) score += 200;
@@ -239,6 +249,37 @@ function resolvePartialAmbiguity(ranked: RankedLine[], menu: MenuItem[], hay: st
   return out;
 }
 
+function pruneSupersededItems(
+  items: { menuItemId: string; name: string; qty: number }[],
+  menu: MenuItem[],
+  hay: string,
+) {
+  if (!items.length || !hay.trim()) return items;
+
+  const fullHits = items.filter((it) => {
+    const m = menu.find((x) => x.id === it.menuItemId);
+    return m && fullNameMatch(fold(m.name), hay).ok;
+  });
+
+  return items.filter((it) => {
+    const m = menu.find((x) => x.id === it.menuItemId);
+    if (!m) return false;
+    if (fullNameMatch(fold(m.name), hay).ok) return true;
+
+    const exclusive = significantTokens(m.name).filter((t) => !tokenInHay(hay, t));
+    if (exclusive.length === 0) return true;
+
+    const superseded = fullHits.some((fh) => {
+      if (fh.menuItemId === it.menuItemId) return false;
+      const fm = menu.find((x) => x.id === fh.menuItemId);
+      if (!fm) return false;
+      const shared = significantTokens(m.name).filter((t) => significantTokens(fm.name).includes(t));
+      return shared.length >= 2;
+    });
+    return !superseded;
+  });
+}
+
 /**
  * Detecta artículos del catálogo en texto del cliente o del resumen del mesero.
  * Si hay varias variantes del mismo producto (ej. varias Coca-Colas), no agrega todas:
@@ -267,5 +308,5 @@ export function inferLineItemsFromCorpus(corpus: string, menu: MenuItem[]) {
     out.push({ menuItemId: it.menuItemId, name: it.name, qty: it.qty });
   }
 
-  return out.sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return pruneSupersededItems(out, menu, hay).sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
