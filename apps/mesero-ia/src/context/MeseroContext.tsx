@@ -324,7 +324,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
             name: it.name,
             qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
           }));
-          setPendingDraft((prev) => mergeDraftInputs(prev, incoming));
+          setPendingDraft(incoming);
           setTouchCart({});
         }
         if (Array.isArray(res.draftAmbiguous) && res.draftAmbiguous.length > 0) {

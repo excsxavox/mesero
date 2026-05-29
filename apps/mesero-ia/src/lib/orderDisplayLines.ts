@@ -87,7 +87,7 @@ function mergeDisplayLine(map: Map<string, DisplayLine>, it: DisplayLine) {
   });
 }
 
-/** Líneas activas del pedido (voz del cliente + borrador IA + carrito táctil). */
+/** Líneas activas del pedido (borrador IA + carrito táctil; sin re-inferir si ya hay borrador). */
 export function mergedActiveLines(
   menu: MenuItem[],
   userCorpus: string,
@@ -95,10 +95,11 @@ export function mergedActiveLines(
   assistantDraft?: DraftLineInput[],
 ) {
   const map = new Map<string, DisplayLine>();
-  if (userCorpus.trim()) {
+  if (assistantDraft?.length) {
+    for (const it of linesFromDraftInput(menu, assistantDraft)) mergeDisplayLine(map, it);
+  } else if (userCorpus.trim()) {
     for (const it of draftLinesFromCorpus(userCorpus, menu)) mergeDisplayLine(map, it);
   }
-  for (const it of linesFromDraftInput(menu, assistantDraft)) mergeDisplayLine(map, it);
   for (const it of touchCartLines(menu, touchCart)) mergeDisplayLine(map, it);
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
 }

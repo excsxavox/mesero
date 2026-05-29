@@ -1,6 +1,7 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import type { MenuItem } from "../lib/types";
 import { findAmbiguousProductGroups } from "../lib/orderDraftAmbiguity";
+import { collapseVariantLines, dedupeAmbiguousGroups } from "../lib/variantCollapse";
 import { buildOrderInferenceCorpusForDraft } from "../lib/orderDraftCorpus";
 import { inferLineItemsFromCorpus } from "../lib/inferLineItems";
 import { mergeDraftInputs, type DraftLineInput } from "../lib/orderDisplayLines";
@@ -50,9 +51,16 @@ export function useLocalOrderDraftSync(menu: MenuItem[], target: SyncTarget) {
   useEffect(() => {
     if (!menu.length) return;
 
+    const last = messages[messages.length - 1];
+    if (last?.role === "assistant") return;
+
     const corpus = buildOrderInferenceCorpusForDraft(messages, draftEpochMs, wakeWord);
-    const inferred = inferLineItemsFromCorpus(corpus, menu.filter((m) => m.available !== false));
-    const ambiguous = findAmbiguousProductGroups(corpus, menu);
+    const inferred = collapseVariantLines(
+      inferLineItemsFromCorpus(corpus, menu.filter((m) => m.available !== false)),
+      menu,
+      corpus,
+    );
+    const ambiguous = dedupeAmbiguousGroups(findAmbiguousProductGroups(corpus, menu));
 
     setPendingDraft((prev) => {
       const afterRemoval = applyRemovalsFromLastUser(prev, messages, menu, wakeWord);

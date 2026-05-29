@@ -33,6 +33,87 @@ function expandedHay(text) {
     .trim();
 }
 
+const SPANISH_QTY = {
+  un: 1,
+  una: 1,
+  uno: 1,
+  dos: 2,
+  tres: 3,
+  cuatro: 4,
+  cinco: 5,
+  seis: 6,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+};
+
+function clampQty(n) {
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(99, Math.floor(n));
+}
+
+function qtyBeforeIndex(hay, idx) {
+  const before = hay.slice(Math.max(0, idx - 32), idx);
+  const m1 = before.match(/(\d{1,2})\s*[x×]\s*$/i);
+  if (m1) return clampQty(parseInt(m1[1], 10));
+  const m2 = before.match(/(\d{1,2})\s+$/);
+  if (m2) return clampQty(parseInt(m2[1], 10));
+  for (const [w, q] of Object.entries(SPANISH_QTY)) {
+    if (new RegExp(`\\b${w}\\s+$`, "i").test(before)) return q;
+  }
+  return 1;
+}
+
+/** Variantes del nombre en texto hablado (arroz → arroces). */
+function nameVariantsForHay(itemName) {
+  const nm = fold(itemName).trim();
+  if (!nm) return [];
+  const out = new Set([nm]);
+  if (!nm.includes(" ")) {
+    out.add(`${nm}s`);
+    out.add(`${nm}es`);
+    if (nm.endsWith("z")) out.add(`${nm.slice(0, -1)}ces`);
+  }
+  return [...out];
+}
+
+/** Cantidad mencionada antes del nombre del plato en el corpus (ej. «dos arroces» → 2). */
+export function qtyForMenuItemInHay(text, itemName) {
+  const hay = expandedHay(text);
+  if (!hay) return 1;
+  let maxQ = 1;
+  for (const variant of nameVariantsForHay(itemName)) {
+    let pos = 0;
+    while (pos < hay.length) {
+      const idx = hay.indexOf(variant, pos);
+      if (idx === -1) break;
+      const charBefore = idx > 0 ? hay[idx - 1] : " ";
+      const charAfter = idx + variant.length < hay.length ? hay[idx + variant.length] : " ";
+      const boundaryBefore = !/\p{L}|\p{N}/u.test(charBefore);
+      const boundaryAfter = !/\p{L}|\p{N}/u.test(charAfter);
+      if (boundaryBefore && boundaryAfter) {
+        maxQ = Math.max(maxQ, qtyBeforeIndex(hay, idx));
+      }
+      pos = idx + Math.max(1, variant.length);
+    }
+  }
+  return maxQ;
+}
+
+/** Ajusta cantidades del borrador según lo que dijo el cliente o confirmó el mesero en voz. */
+export function applyQtyToDraftLines(lines, menu, ...textParts) {
+  const hay = expandedHay(textParts.filter(Boolean).join(" "));
+  if (!hay || !Array.isArray(lines)) return lines ?? [];
+  return lines.map((line) => {
+    const mi = menu.find((m) => m.id === line.menuItemId);
+    if (!mi) return line;
+    const fromText = qtyForMenuItemInHay(hay, mi.name);
+    const prev = Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1));
+    return { ...line, qty: Math.max(prev, fromText) };
+  });
+}
+
 function significantTokens(name) {
   return fold(name)
     .split(/\s+/)
@@ -41,7 +122,13 @@ function significantTokens(name) {
 
 function tokenInHay(hay, token) {
   const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\s,])${esc}(?:$|[\\s,])`, "i").test(` ${hay} `);
+  const boundary = (t) => new RegExp(`(?:^|[\\s,])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[\\s,])`, "i").test(` ${hay} `);
+  if (boundary(token)) return true;
+  const stem = token.replace(/s$/, "");
+  if (stem.length >= 3 && stem !== token && boundary(stem)) return true;
+  if (token.endsWith("z") && boundary(`${token.slice(0, -1)}ces`)) return true;
+  if (token.endsWith("ces") && token.length > 4 && boundary(`${token.slice(0, -3)}z`)) return true;
+  return false;
 }
 
 function matchedTokenSignature(itemName, hay) {
@@ -52,25 +139,34 @@ function matchedTokenSignature(itemName, hay) {
 }
 
 function fullNameInHay(itemName, hay) {
-  const nm = fold(itemName).trim();
-  if (!nm) return false;
-  let pos = 0;
-  while (pos < hay.length) {
-    const idx = hay.indexOf(nm, pos);
-    if (idx === -1) break;
-    const charBefore = idx > 0 ? hay[idx - 1] : " ";
-    const charAfter = idx + nm.length < hay.length ? hay[idx + nm.length] : " ";
-    const boundaryBefore = !/\p{L}|\p{N}/u.test(charBefore);
-    const boundaryAfter = !/\p{L}|\p{N}/u.test(charAfter);
-    if (boundaryBefore && boundaryAfter) return true;
-    pos = idx + Math.max(1, nm.length);
+  for (const variant of nameVariantsForHay(itemName)) {
+    let pos = 0;
+    while (pos < hay.length) {
+      const idx = hay.indexOf(variant, pos);
+      if (idx === -1) break;
+      const charBefore = idx > 0 ? hay[idx - 1] : " ";
+      const charAfter = idx + variant.length < hay.length ? hay[idx + variant.length] : " ";
+      const boundaryBefore = !/\p{L}|\p{N}/u.test(charBefore);
+      const boundaryAfter = !/\p{L}|\p{N}/u.test(charAfter);
+      if (boundaryBefore && boundaryAfter) return true;
+      pos = idx + Math.max(1, variant.length);
+    }
   }
   return false;
+}
+
+function isCocaColaProduct(name) {
+  const n = fold(name);
+  return /\b(coca|cola)\b/.test(n) && !/\bfiora\b/.test(n);
 }
 
 function lineMatchesUserText(mi, hay) {
   if (!hay || !mi) return false;
   if (fullNameInHay(mi.name, hay)) return true;
+  if (isCocaColaProduct(mi.name)) {
+    if (sizeHintsInHay(mi.name, hay)) return true;
+    if (/\bpersonal\b/.test(hay) && /\b500\s*ml\b/.test(fold(mi.name))) return true;
+  }
   const tokens = significantTokens(mi.name);
   if (tokens.length === 0) return false;
   const matched = tokens.filter((t) => tokenInHay(hay, t));
@@ -87,6 +183,7 @@ function lineMatchesUserText(mi, hay) {
     return matched.length === 2;
   }
   if (tokens.length === 1 && matched.length === 1 && tokens[0].length >= 4) return true;
+  if (isCocaColaProduct(mi.name) && matched.length < tokens.length) return false;
   return false;
 }
 
@@ -127,7 +224,43 @@ function uniqueBrandSodaPick(options, hay) {
     });
     if (picks.length === 1) return picks[0];
   }
+  const cocaOpts = options.filter((m) => isCocaColaProduct(m.name));
+  if (cocaOpts.length >= 2 && /\b(cola|coca)\b/.test(hay)) {
+    if (/\bpersonal\b/.test(hay)) {
+      const personal = cocaOpts.filter((m) => /\b500\s*ml\b/.test(fold(m.name)));
+      if (personal.length === 1) return personal[0];
+    }
+    const sizePicks = cocaOpts.filter((m) => sizeHintsInHay(m.name, hay));
+    if (sizePicks.length === 1) return sizePicks[0];
+    const fullHits = cocaOpts.filter((m) => fullNameInHay(m.name, hay));
+    if (fullHits.length === 1) return fullHits[0];
+  }
   return null;
+}
+
+function isSodaMenuItem(name) {
+  return /\b(coca|cola|pepsi|fiora|vanti|gaseosa|refresco)\b/i.test(fold(name));
+}
+
+function collapseVariantLines(lines, menu, hay) {
+  const sodaLines = lines.filter((line) => {
+    const mi = menu.find((m) => m.id === line.menuItemId);
+    return mi && isSodaMenuItem(mi.name);
+  });
+  if (sodaLines.length <= 1) return lines;
+  const candidates = sodaLines.map((l) => menu.find((m) => m.id === l.menuItemId)).filter(Boolean);
+  const pick = uniqueBrandSodaPick(candidates, hay) ?? (() => {
+    const cocaOnly = candidates.filter((m) => isCocaColaProduct(m.name));
+    if (cocaOnly.length >= 2) return null;
+    return cocaOnly.length === 1 ? cocaOnly[0] : null;
+  })();
+  const dropIds = new Set(sodaLines.map((l) => l.menuItemId));
+  const rest = lines.filter((l) => !dropIds.has(l.menuItemId));
+  if (pick) {
+    const prev = sodaLines.find((l) => l.menuItemId === pick.id);
+    rest.push(prev ?? { menuItemId: pick.id, name: pick.name, qty: 1 });
+  }
+  return rest;
 }
 
 function resolveAmbiguousGroups(lines, menu, hay) {
@@ -189,10 +322,14 @@ export function inferMenuLinesFromText(text, menu) {
   for (const m of menu) {
     if (m.available === false) continue;
     if (lineMatchesUserText(m, hay)) {
-      lines.push({ menuItemId: m.id, name: m.name, qty: 1 });
+      lines.push({ menuItemId: m.id, name: m.name, qty: qtyForMenuItemInHay(hay, m.name) });
     }
   }
-  return filterAmbiguousMenuLines(pruneSupersededLines(lines, menu, hay), menu, hay, { mode: "draft" });
+  return collapseVariantLines(
+    filterAmbiguousMenuLines(pruneSupersededLines(lines, menu, hay), menu, hay, { mode: "draft" }),
+    menu,
+    hay,
+  );
 }
 
 /** Une listas de borrador por menuItemId (último gana en qty/nombre). */
@@ -202,10 +339,12 @@ export function mergeDraftItemLists(...lists) {
     if (!Array.isArray(list)) continue;
     for (const line of list) {
       if (!line?.menuItemId) continue;
+      const qty = Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1));
+      const prev = map.get(line.menuItemId);
       map.set(line.menuItemId, {
         menuItemId: line.menuItemId,
         name: line.name || line.menuItemId,
-        qty: Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1)),
+        qty: prev ? Math.max(prev.qty, qty) : qty,
       });
     }
   }
@@ -243,6 +382,7 @@ export function filterAmbiguousMenuLines(lines, menu, userText, opts = {}) {
 
 function sizeHintsInHay(name, hay) {
   const nm = fold(name);
+  if (/\bpersonal\b/.test(hay) && /\b500\s*ml\b/.test(nm)) return true;
   const ml = nm.match(/\b(\d+(?:[.,]\d+)?)\s*ml\b/);
   if (ml && new RegExp(`\\b${ml[1].replace(".", "[.,]")}\\s*ml\\b`, "i").test(hay)) return true;
   const lit = nm.match(/\b(\d+(?:[.,]\d+)?)\s*litros?\b/);
@@ -351,9 +491,17 @@ export function findAmbiguousProductGroups(userText, menu) {
     if (!out.some((x) => x.label === g.label)) out.push(g);
   }
 
-  return out.filter((g) => {
+  const deduped = [];
+  const seenOpts = new Set();
+  for (const g of out.filter((g) => {
     if (g.label !== "Gaseosa") return true;
     const options = menu.filter((m) => m.available !== false && /\b(coca|cola|pepsi|fiora|gaseosa|refresco|vanti)\b/i.test(fold(m.name)));
     return !uniqueBrandSodaPick(options, hay);
-  });
+  })) {
+    const key = [...g.options].sort().join("|");
+    if (seenOpts.has(key)) continue;
+    seenOpts.add(key);
+    deduped.push(g);
+  }
+  return deduped;
 }

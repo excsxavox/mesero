@@ -20,7 +20,13 @@ import {
 import { fetchCommercialOfferings, isCommercialOfferingsConfigured } from "./aiboxOfferings.js";
 import { catalogSource, getResolvedCatalog, invalidateCatalogCache } from "./menuCatalog.js";
 import { getOfferingImage } from "./offeringImageStore.js";
-import { filterAmbiguousMenuLines, findAmbiguousProductGroups, inferMenuLinesFromText, mergeDraftItemLists } from "./orderAmbiguity.js";
+import {
+  applyQtyToDraftLines,
+  filterAmbiguousMenuLines,
+  findAmbiguousProductGroups,
+  inferMenuLinesFromText,
+  mergeDraftItemLists,
+} from "./orderAmbiguity.js";
 import {
   buildConversationPhaseHint,
   buildWaiterHospitalityBlock,
@@ -1169,7 +1175,9 @@ Si el cliente pregunta cómo va su pedido, si está listo, en preparación, etc.
   return `Eres el mesero virtual de "${store.settings.restaurantName}".
 Te presentas como ${wakeLabel} (mesero/a virtual). En el quiosco el cliente activa el micrófono diciendo la palabra «${wakeLabel}» antes de su pedido.
 
-BIENVENIDA (primer turno o solo saludo): saludo breve — «¡Buenas! Bienvenidos a ${store.settings.restaurantName}», preséntate como ${wakeLabel} y pregunta si quieren recomendación o ya saben qué pedir. Máximo 2 frases. No uses «Bienvenido/a» ni barras; no uses frases frías como «¿en qué te puedo ayudar?».
+BIENVENIDA (primer turno, solo saludo o solo palabra de activación): responde con EXACTAMENTE este guion (solo cambia el nombre del restaurante y tu nombre ${wakeLabel}):
+«¡Qué gusto tenerlos en ${store.settings.restaurantName}! Soy ${wakeLabel}, y estaré acompañándolos durante su experiencia. Puedo ayudarles con recomendaciones personalizadas o tomar su pedido cuando gusten.»
+No improvises otro saludo de bienvenida. Son 3 frases (excepción al límite de 2 frases solo en bienvenida).
 
 LÍMITE DE LONGITUD (visible al cliente): máximo 2 frases cortas por turno. Los bloques DRAFT_JSON y ORDER_JSON al final no cuentan para ese límite.
 
@@ -1197,6 +1205,7 @@ Mientras el cliente arma el pedido SIN confirmación final, incluye SIEMPRE al f
 con TODOS los platos que el cliente pidió o aceptó en este pedido en construcción. Usa el menuItemId exacto del menú de arriba (el id entre corchetes) que corresponda al nombre del plato que mencionó el cliente — no inventes ids ni confundas platos (ej. si pidió habas/choclo, no pongas arroz). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó. Si el cliente solo pregunta qué lleva su pedido o pide un resumen, NO agregues platos nuevos al DRAFT_JSON: repite en voz lo ya pedido y deja el mismo DRAFT_JSON (o {"items":[]} si aún no pidió nada).
 IMPORTANTE — productos con variantes: si el cliente pide algo genérico (ej. «un jugo», «una cola», «una cerveza», «un agua») y en el menú hay varias opciones, NO pongas ninguna variante en DRAFT_JSON. Pregunta en voz cuál prefiere nombrando 2-3 opciones que aparezcan EXACTAMENTE en el menú de arriba (usa los nombres tal cual están escritos, sin inventar sabores, tamaños ni presentaciones que no existan en la carta). Solo agrega UNA línea cuando el cliente ya especificó la variante o eligió una de las opciones reales del menú.
 Si el cliente pide algo genérico pero en el menú solo hay UN producto de ese tipo, agrégalo directamente a DRAFT_JSON sin preguntar variante.
+«Coca Cola personal» o «personal» = la variante de 500 ml del menú. «Dos arroces» = qty 2 en el ítem Arroz. El DRAFT_JSON debe coincidir con lo que dices en voz (mismos ítems, mismas cantidades, una sola variante de gaseosa).
 
 Para registrar un pedido confirmado, cuando el cliente confirme explícitamente, incluye al final un bloque JSON en una sola línea con este formato exacto:
 <<<ORDER_JSON>>>{"table":"Mesa X o vacío","items":[{"menuItemId":"m1","qty":2,"notes":"sin cebolla"}],"notes":"notas generales"}<<<END_ORDER_JSON>>>
@@ -2167,6 +2176,7 @@ app.post("/api/chat/complete", async (req, res) => {
     }
     // Solo DRAFT_JSON + lo que dijo el cliente; no inferir del texto visible del asistente (evita llenar el pedido al listar el menú).
     draftItems = mergeDraftItemLists(draftItems, inferMenuLinesFromText(orderCorpus, menu));
+    draftItems = applyQtyToDraftLines(draftItems, menu, orderCorpus, content);
     draftAmbiguous = findAmbiguousProductGroups(lastUser, menu);
     if (draftAmbiguous.length === 0) {
       draftAmbiguous = findAmbiguousProductGroups(orderCorpus, menu);

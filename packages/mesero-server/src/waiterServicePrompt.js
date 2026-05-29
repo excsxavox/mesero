@@ -20,7 +20,7 @@ export function buildWaiterHospitalityBlock() {
 export function buildConversationPhaseHint(messages) {
   const userTurns = Array.isArray(messages) ? messages.filter((m) => m.role === "user").length : 0;
   if (userTurns <= 1) {
-    return "FASE SUGERIDA: Bienvenida — saludo cálido con «¡Buenas! Bienvenidos a [restaurante]», preséntate por nombre y pregunta si quieren recomendación o ya saben qué pedir. Evita «¿en qué te puedo ayudar?» suena frío; prefiere «¿qué te provoca?», «¿te recomiendo algo?». No uses barras (Bienvenido/a).";
+    return "FASE SUGERIDA: Bienvenida — usa el guion fijo de bienvenida (3 frases): «¡Qué gusto tenerlos en [restaurante]! Soy [nombre del bot], y estaré acompañándolos durante su experiencia. Puedo ayudarles con recomendaciones personalizadas o tomar su pedido cuando gusten.» No improvises otro saludo.";
   }
   if (userTurns <= 3) {
     return "FASE SUGERIDA: Descubrimiento — escucha gustos; si recomiendas, 1 plato + 1 frase de razón (sin párrafos).";
@@ -41,7 +41,7 @@ export function defaultWaiterFlow() {
         position: { x: 0, y: 0 },
         data: {
           label: "Bienvenida",
-          hint: "Saludo cordial: «¡Buenas! Bienvenidos a [restaurante]», preséntate y ofrece recomendación o tomar pedido. Si hay mesa en el quiosco, no preguntes la mesa. No uses Bienvenido/a.",
+          hint: "Saludo fijo (3 frases): «¡Qué gusto tenerlos en [restaurante]! Soy [nombre del bot], y estaré acompañándolos durante su experiencia. Puedo ayudarles con recomendaciones personalizadas o tomar su pedido cuando gusten.» Si hay mesa en el quiosco, no preguntes la mesa.",
         },
       },
       {
@@ -94,6 +94,21 @@ export const DEFAULT_ASSISTANT_EXTRA_INSTRUCTIONS =
   "Tono humano y directo, como mesero/a con experiencia. Respuestas cortas (máx. 2 frases). Vende con 1 sugerencia concreta, sin exagerar ni usar lenguaje publicitario. Por defecto español; si el cliente habla inglés, responde solo en inglés. Ante alergias, confirma ingredientes. No inventes platos.";
 
 /**
+ * Texto de bienvenida estándar (primer contacto o solo palabra de activación).
+ * @param {string} restaurantName
+ * @param {string} assistantName — nombre visible del bot (p. ej. Karen)
+ * @param {{ english?: boolean }} [opts]
+ */
+export function buildWelcomeGreetingText(restaurantName, assistantName, opts = {}) {
+  const place = String(restaurantName || "nuestro restaurante").trim() || "nuestro restaurante";
+  const name = String(assistantName || "Karen").trim() || "Karen";
+  if (opts.english) {
+    return `What a pleasure to have you at ${place}! I'm ${name}, and I'll be with you throughout your experience. I can help you with personalized recommendations or take your order whenever you're ready.`;
+  }
+  return `¡Qué gusto tenerlos en ${place}!\nSoy ${name}, y estaré acompañándolos durante su experiencia.\nPuedo ayudarles con recomendaciones personalizadas o tomar su pedido cuando gusten.`;
+}
+
+/**
  * Saludo de bienvenida cordial (primer contacto o solo «Karen» / «hola»).
  * @param {object} settings
  * @param {{ kioskTable?: number | null; english?: boolean }} [opts]
@@ -102,11 +117,7 @@ export function buildWelcomeReply(settings, opts = {}) {
   const place = String(settings?.restaurantName || "nuestro restaurante").trim() || "nuestro restaurante";
   const who = String(settings?.wakeWord || "karen").trim();
   const name = who.length ? who.charAt(0).toUpperCase() + who.slice(1).toLowerCase() : "Karen";
-  const table = opts.kioskTable ? ` Mesa ${opts.kioskTable}.` : "";
-  if (opts.english) {
-    return `Hello and welcome to ${place}!${table} I'm ${name}. Would you like a recommendation, or do you know what you'd like?`;
-  }
-  return `¡Buenas! Bienvenidos a ${place}.${table} Soy ${name}. ¿Te recomiendo algo o ya sabes qué pedir?`;
+  return buildWelcomeGreetingText(place, name, { english: opts.english });
 }
 
 /** Texto del usuario vacío o solo saludo / palabra de activación. */

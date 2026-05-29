@@ -1,4 +1,5 @@
 import type { MenuItem } from "./types";
+import { collapseVariantLines } from "./variantCollapse";
 
 function fold(s: string) {
   return s
@@ -55,7 +56,6 @@ const SIDE_INGREDIENT_WORDS = new Set([
   "papas",
   "ensalada",
   "salsa",
-  "arroz",
   "frijol",
   "frijoles",
   "yuca",
@@ -93,17 +93,33 @@ function tokenBoundaryRegex(token: string) {
 }
 
 function tokenInHay(hay: string, token: string): boolean {
-  return tokenBoundaryRegex(token).test(` ${hay} `);
+  if (tokenBoundaryRegex(token).test(` ${hay} `)) return true;
+  const stem = token.replace(/s$/, "");
+  if (stem.length >= 3 && stem !== token && tokenBoundaryRegex(stem).test(` ${hay} `)) return true;
+  if (token.endsWith("z")) {
+    const ces = `${token.slice(0, -1)}ces`;
+    if (tokenBoundaryRegex(ces).test(` ${hay} `)) return true;
+  }
+  if (token.endsWith("ces") && token.length > 4) {
+    const z = `${token.slice(0, -3)}z`;
+    if (tokenBoundaryRegex(z).test(` ${hay} `)) return true;
+  }
+  return false;
 }
 
-function matchedTokenSignature(itemName: string, hay: string): string {
-  return significantTokens(itemName)
-    .filter((t) => tokenInHay(hay, t))
-    .sort()
-    .join("|");
+function nameVariantsForHay(itemName: string): string[] {
+  const nm = fold(itemName).trim();
+  if (!nm) return [];
+  const out = new Set([nm]);
+  if (!nm.includes(" ")) {
+    out.add(`${nm}s`);
+    out.add(`${nm}es`);
+    if (nm.endsWith("z")) out.add(`${nm.slice(0, -1)}ces`);
+  }
+  return [...out];
 }
 
-function fullNameMatch(nm: string, hay: string): { ok: boolean; idx: number } {
+function fullNameMatchSingle(nm: string, hay: string): { ok: boolean; idx: number } {
   let pos = 0;
   while (pos < hay.length) {
     const idx = hay.indexOf(nm, pos);
@@ -116,6 +132,44 @@ function fullNameMatch(nm: string, hay: string): { ok: boolean; idx: number } {
     pos = idx + Math.max(1, nm.length);
   }
   return { ok: false, idx: -1 };
+}
+
+function matchedTokenSignature(itemName: string, hay: string): string {
+  return significantTokens(itemName)
+    .filter((t) => tokenInHay(hay, t))
+    .sort()
+    .join("|");
+}
+
+function fullNameMatch(nm: string, hay: string): { ok: boolean; idx: number } {
+  for (const variant of nameVariantsForHay(nm)) {
+    const hit = fullNameMatchSingle(variant, hay);
+    if (hit.ok) return hit;
+  }
+  return { ok: false, idx: -1 };
+}
+
+/** Cantidad mencionada antes del nombre del plato (ej. «dos arroces» → 2). */
+export function qtyForMenuItemInHay(text: string, itemName: string): number {
+  const hay = expandedHay(text);
+  if (!hay) return 1;
+  let maxQ = 1;
+  for (const variant of nameVariantsForHay(itemName)) {
+    let pos = 0;
+    while (pos < hay.length) {
+      const idx = hay.indexOf(variant, pos);
+      if (idx === -1) break;
+      const charBefore = idx > 0 ? hay[idx - 1]! : " ";
+      const charAfter = idx + variant.length < hay.length ? hay[idx + variant.length]! : " ";
+      const boundaryBefore = !/\p{L}|\p{N}/u.test(charBefore);
+      const boundaryAfter = !/\p{L}|\p{N}/u.test(charAfter);
+      if (boundaryBefore && boundaryAfter) {
+        maxQ = Math.max(maxQ, qtyBeforeIndex(hay, idx));
+      }
+      pos = idx + Math.max(1, variant.length);
+    }
+  }
+  return maxQ;
 }
 
 function userExplicitlyOrdersSide(word: string, hay: string): boolean {
@@ -140,6 +194,7 @@ function productSizeHints(name: string): { kind: "ml" | "l"; value: string }[] {
 }
 
 function sizeHintsMatchProduct(name: string, hay: string): boolean {
+  if (/\bpersonal\b/.test(hay) && /\b500\s*ml\b/i.test(fold(name))) return true;
   const hints = productSizeHints(name);
   if (hints.length === 0) return false;
   return hints.every((h) => {
@@ -149,7 +204,7 @@ function sizeHintsMatchProduct(name: string, hay: string): boolean {
   });
 }
 
-function scoreMenuItem(m: MenuItem, hay: string): { score: number; qty: number } {
+function scoreMenuItem(m: MenuItem, hay: string, menu: MenuItem[]): { score: number; qty: number } {
   const nm = fold(m.name).trim();
   if (nm.length < 2) return { score: 0, qty: 1 };
 
@@ -180,6 +235,16 @@ function scoreMenuItem(m: MenuItem, hay: string): { score: number; qty: number }
   const brandTokens = tokens.filter((t) => !/^\d+$/.test(t) && t !== "litros");
   const brandMatched = brandTokens.filter((t) => tokenInHay(hay, t));
   if (brandTokens.length >= 2 && brandMatched.length === brandTokens.length) {
+    const sodaSiblings = menu.filter(
+      (other) =>
+        other.id !== m.id &&
+        /\b(coca|cola)\b/i.test(fold(other.name)) &&
+        /\b(coca|cola)\b/i.test(nm) &&
+        !/\bfiora\b/i.test(fold(other.name)),
+    );
+    if (sodaSiblings.length > 0 && !sizeHintsMatchProduct(m.name, hay) && !/\bpersonal\b/.test(hay)) {
+      return { score: 0, qty: 1 };
+    }
     const firstIdx = brandMatched
       .map((t) => hay.search(tokenBoundaryRegex(t)))
       .filter((i) => i >= 0)
@@ -291,7 +356,7 @@ export function inferLineItemsFromCorpus(corpus: string, menu: MenuItem[]) {
 
   const ranked: RankedLine[] = [];
   for (const m of menu) {
-    const { score, qty } = scoreMenuItem(m, hay);
+    const { score, qty } = scoreMenuItem(m, hay, menu);
     if (score >= 100) ranked.push({ menuItemId: m.id, name: m.name, qty, score });
   }
 
@@ -305,8 +370,12 @@ export function inferLineItemsFromCorpus(corpus: string, menu: MenuItem[]) {
   for (const it of [...fullMatches, ...partialResolved]) {
     if (seen.has(it.menuItemId)) continue;
     seen.add(it.menuItemId);
-    out.push({ menuItemId: it.menuItemId, name: it.name, qty: it.qty });
+    const m = menu.find((x) => x.id === it.menuItemId);
+    const qty = m ? Math.max(it.qty, qtyForMenuItemInHay(hay, m.name)) : it.qty;
+    out.push({ menuItemId: it.menuItemId, name: it.name, qty });
   }
 
-  return pruneSupersededItems(out, menu, hay).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return collapseVariantLines(pruneSupersededItems(out, menu, hay), menu, hay).sort((a, b) =>
+    a.name.localeCompare(b.name, "es"),
+  );
 }
