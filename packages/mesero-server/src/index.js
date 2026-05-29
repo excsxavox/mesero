@@ -22,6 +22,7 @@ import { catalogSource, getResolvedCatalog, invalidateCatalogCache } from "./men
 import { getOfferingImage } from "./offeringImageStore.js";
 import {
   applyQtyToDraftLines,
+  collapseVariantLines,
   filterAmbiguousMenuLines,
   findAmbiguousProductGroups,
   inferMenuLinesFromAssistantConfirmation,
@@ -2182,6 +2183,7 @@ app.post("/api/chat/complete", async (req, res) => {
       inferMenuLinesFromAssistantConfirmation(content, menu),
     );
     draftItems = applyQtyToDraftLines(draftItems, menu, orderCorpus, content);
+    draftItems = collapseVariantLines(draftItems, menu, orderCorpus);
     draftAmbiguous = findAmbiguousProductGroups(lastUser, menu);
     if (draftAmbiguous.length === 0) {
       draftAmbiguous = findAmbiguousProductGroups(orderCorpus, menu);

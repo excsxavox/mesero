@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    test: {
+      environment: "node",
+      include: ["src/**/*.test.ts"],
+    },
     resolve: {
       alias: {
         qrcode: qrcodeBrowser,

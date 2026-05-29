@@ -22,7 +22,7 @@ import {
   saveMeseroSession,
   type MeseroMsg,
 } from "../lib/meseroSessionStorage";
-import { speechLocaleFromConversation } from "../lib/speechLocale";
+import { speechLocaleFromConversation, stripWakeWordFromUtterance } from "../lib/speechLocale";
 import type { ConfirmedBundle, DraftAmbiguousGroup, DraftLineInput } from "../lib/orderDisplayLines";
 import { mergeDraftInputs } from "../lib/orderDisplayLines";
 import { buildOrderInferenceCorpusForDraft, buildUserOrderCorpus } from "../lib/orderDraftCorpus";
@@ -335,16 +335,24 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         const inferCorpus = assistantConfirmsOrderItems(assistVisible)
           ? `${userCorpus} ${assistVisible}`.replace(/\s+/g, " ").trim()
           : userCorpus;
+        const lastUserMsg = stripWakeWordFromUtterance(
+          next.filter((m) => m.role === "user").at(-1)?.content ?? "",
+          wakeWord,
+        );
+        const repeatHay = assistantConfirmsOrderItems(assistVisible)
+          ? `${lastUserMsg} ${assistVisible}`.trim()
+          : lastUserMsg;
         const menuForInfer = syncMenuRef.current.filter((m) => m.available !== false);
+        const mergeOpts = { lastUtterance: repeatHay, menu: syncMenuRef.current };
         setPendingDraft((prev) => {
-          let merged = mergeDraftInputs(prev, incoming, { lastUtterance: inferCorpus });
+          let merged = mergeDraftInputs(prev, incoming, mergeOpts);
           if (menuForInfer.length && inferCorpus) {
             const inferred = collapseVariantLines(
               inferLineItemsFromCorpus(inferCorpus, menuForInfer),
               syncMenuRef.current,
               inferCorpus,
             );
-            merged = mergeDraftInputs(merged, inferred, { lastUtterance: inferCorpus });
+            merged = mergeDraftInputs(merged, inferred, mergeOpts);
           }
           return merged;
         });

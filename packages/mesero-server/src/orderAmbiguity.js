@@ -155,15 +155,18 @@ export function qtyForMenuItemInHay(text, itemName, menuItem) {
 /** Ajusta cantidades del borrador según lo que dijo el cliente o confirmó el mesero en voz. */
 export function applyQtyToDraftLines(lines, menu, ...textParts) {
   const parts = textParts.filter(Boolean);
-  const fullHay = expandedHay(parts.join(" "));
   const lastHay = expandedHay(parts[parts.length - 1] ?? "");
-  if (!fullHay || !Array.isArray(lines)) return lines ?? [];
+  const userHay =
+    parts.length > 1 ? expandedHay(parts.slice(0, -1).join(" ")) : expandedHay(parts[0] ?? "");
+  if (!userHay && !lastHay) return lines ?? [];
+  if (!Array.isArray(lines)) return lines ?? [];
   return lines.map((line) => {
     const mi = menu.find((m) => m.id === line.menuItemId);
     if (!mi) return line;
     const prev = Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1));
-    let qty = Math.max(prev, qtyForMenuItemInHay(fullHay, mi.name, mi));
-    if (hasRepeatOrderPhrase(lastHay, mi.name)) {
+    const fromUser = userHay ? qtyForMenuItemInHay(userHay, mi.name, mi) : 1;
+    let qty = Math.max(prev, fromUser);
+    if (hasRepeatOrderPhrase(lastHay, mi.name) && fromUser <= prev) {
       qty = Math.max(qty, prev + 1);
     }
     return { ...line, qty: Math.min(99, qty) };
@@ -343,7 +346,7 @@ function isSodaMenuItem(name) {
   return /\b(coca|cola|pepsi|fiora|vanti|gaseosa|refresco)\b/i.test(fold(name));
 }
 
-function collapseVariantLines(lines, menu, hay) {
+export function collapseVariantLines(lines, menu, hay) {
   const sodaLines = lines.filter((line) => {
     const mi = menu.find((m) => m.id === line.menuItemId);
     return mi && isSodaMenuItem(mi.name);

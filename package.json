@@ -12,7 +12,9 @@
     "dev:mesero": "npm run dev -w mesero-ia",
     "dev:receptor": "npm run dev -w receptor-pedidos",
     "dev:recepcion": "npm run dev -w recepcion-ia",
-    "build": "npm run build -w mesero-server && npm run build -w mesero-ia && npm run build -w receptor-pedidos && npm run build -w recepcion-ia"
+    "build": "npm run build -w mesero-server && npm run build -w mesero-ia && npm run build -w receptor-pedidos && npm run build -w recepcion-ia",
+    "test": "npm run test -w mesero-server && npm run test -w mesero-ia",
+    "test:watch": "npm run test:watch -w mesero-server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

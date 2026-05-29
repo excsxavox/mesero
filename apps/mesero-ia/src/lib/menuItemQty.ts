@@ -147,10 +147,13 @@ export function applyRepeatQtyBump(
   nextQty: number,
   lastUtterance: string,
   itemName: string,
+  menuItem?: MenuItem,
 ) {
   const prev = Math.max(1, prevQty);
-  let qty = Math.max(prev, nextQty);
-  if (hasRepeatOrderPhrase(lastUtterance, itemName)) {
+  const next = Math.max(1, nextQty);
+  let qty = Math.max(prev, next);
+  // El LLM suele mandar qty 1 otra vez; la inferencia ya trae el total correcto.
+  if (hasRepeatOrderPhrase(lastUtterance, itemName) && next === 1 && prev >= 1) {
     qty = Math.max(qty, prev + 1);
   }
   return Math.min(99, qty);

@@ -34,7 +34,7 @@ export type DraftAmbiguousGroup = { label: string; options: string[] };
 export function mergeDraftInputs(
   prev: DraftLineInput[] | undefined,
   incoming: DraftLineInput[] | undefined,
-  opts?: { lastUtterance?: string },
+  opts?: { lastUtterance?: string; menu?: MenuItem[] },
 ): DraftLineInput[] {
   const map = new Map<string, DraftLineInput>();
   for (const it of prev ?? []) map.set(it.menuItemId, it);
@@ -43,8 +43,9 @@ export function mergeDraftInputs(
     const qty = Math.max(1, Math.min(99, Math.floor(it.qty) || 1));
     const prevLine = map.get(it.menuItemId);
     const name = it.name || prevLine?.name || it.menuItemId;
+    const menuItem = opts?.menu?.find((m) => m.id === it.menuItemId);
     const mergedQty = prevLine
-      ? applyRepeatQtyBump(prevLine.qty, qty, lastUtterance, name)
+      ? applyRepeatQtyBump(prevLine.qty, qty, lastUtterance, name, menuItem)
       : qty;
     map.set(it.menuItemId, {
       menuItemId: it.menuItemId,
