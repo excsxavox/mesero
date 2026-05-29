@@ -160,7 +160,21 @@ function isCocaColaProduct(name) {
   return /\b(coca|cola)\b/.test(n) && !/\bfiora\b/.test(n);
 }
 
-function lineMatchesUserText(mi, hay) {
+/** «choclo» coincide con «Choclo con queso» si es el único plato con esa palabra principal. */
+function matchesByPrimaryToken(mi, hay, menu) {
+  const tokens = significantTokens(mi.name);
+  if (tokens.length < 2) return false;
+  const head = tokens[0];
+  if (head.length < 4 || !tokenInHay(hay, head)) return false;
+  const candidates = menu.filter((m) => {
+    if (m.available === false) return false;
+    const ot = significantTokens(m.name);
+    return ot[0] === head && tokenInHay(hay, head);
+  });
+  return candidates.length === 1 && candidates[0].id === mi.id;
+}
+
+function lineMatchesUserText(mi, hay, menu) {
   if (!hay || !mi) return false;
   if (fullNameInHay(mi.name, hay)) return true;
   if (isCocaColaProduct(mi.name)) {
@@ -180,11 +194,42 @@ function lineMatchesUserText(mi, hay) {
     return matched.length >= Math.ceil(tokens.length * 0.75);
   }
   if (tokens.length === 2) {
-    return matched.length === 2;
+    if (matched.length === 2) return true;
+    if (Array.isArray(menu) && matchesByPrimaryToken(mi, hay, menu)) return true;
+    return false;
   }
   if (tokens.length === 1 && matched.length === 1 && tokens[0].length >= 4) return true;
   if (isCocaColaProduct(mi.name) && matched.length < tokens.length) return false;
   return false;
+}
+
+function stripAssistantTags(text) {
+  return String(text ?? "")
+    .replace(/<<<[\s\S]*?>>>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Karen confirmó que anotó platos (no solo listó el menú). */
+export function assistantConfirmsOrderItems(text) {
+  const t = expandedHay(stripAssistantTags(text));
+  if (!t) return false;
+  if (
+    /\b(tenemos|ofrecemos|recomiendo|opciones|la carta|men[uú]\s+incluye|puedes\s+elegir)\b/.test(t) &&
+    !/\b(agregad|anotad|sum[eé]|apuntad|registrad)\b/.test(t)
+  ) {
+    return false;
+  }
+  return /\b(listo|anotad|agregad|agregue|sum[eé]|apuntad|registrad|qued[oó]|va\s+un|van\s+|te\s+anoto)\b/.test(
+    t,
+  );
+}
+
+/** Ítems que Karen acaba de confirmar en voz («Listo, un choclo agregado»). */
+export function inferMenuLinesFromAssistantConfirmation(text, menu) {
+  const stripped = stripAssistantTags(text);
+  if (!assistantConfirmsOrderItems(stripped)) return [];
+  return inferMenuLinesFromText(stripped, menu);
 }
 
 /** Si el cliente pidió un plato concreto, no arrastrar otro más largo que solo comparte palabras. */
@@ -321,7 +366,7 @@ export function inferMenuLinesFromText(text, menu) {
   const lines = [];
   for (const m of menu) {
     if (m.available === false) continue;
-    if (lineMatchesUserText(m, hay)) {
+    if (lineMatchesUserText(m, hay, menu)) {
       lines.push({ menuItemId: m.id, name: m.name, qty: qtyForMenuItemInHay(hay, m.name) });
     }
   }
@@ -374,7 +419,7 @@ export function filterAmbiguousMenuLines(lines, menu, userText, opts = {}) {
   if (!hay) return lines;
   const validated = lines.filter((line) => {
     const mi = menu.find((m) => m.id === line.menuItemId);
-    return mi && lineMatchesUserText(mi, hay);
+    return mi && lineMatchesUserText(mi, hay, menu);
   });
   if (validated.length <= 1) return validated;
   return resolveAmbiguousGroups(validated, menu, hay);
@@ -447,7 +492,7 @@ export function findAmbiguousProductGroups(userText, menu) {
   const matched = [];
   for (const m of menu) {
     if (m.available === false) continue;
-    if (lineMatchesUserText(m, hay)) matched.push(m);
+    if (lineMatchesUserText(m, hay, menu)) matched.push(m);
   }
 
   const partial = matched.filter((m) => !fullNameInHay(m.name, hay));

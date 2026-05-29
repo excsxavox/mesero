@@ -3,6 +3,7 @@ import type { MenuItem } from "../lib/types";
 import { findAmbiguousProductGroups } from "../lib/orderDraftAmbiguity";
 import { collapseVariantLines, dedupeAmbiguousGroups } from "../lib/variantCollapse";
 import { buildOrderInferenceCorpusForDraft } from "../lib/orderDraftCorpus";
+import { assistantConfirmsOrderItems, stripAssistantTags } from "../lib/orderDraftConfirm";
 import { inferLineItemsFromCorpus } from "../lib/inferLineItems";
 import { mergeDraftInputs, type DraftLineInput } from "../lib/orderDisplayLines";
 import { stripWakeWordFromUtterance } from "../lib/speechLocale";
@@ -52,9 +53,17 @@ export function useLocalOrderDraftSync(menu: MenuItem[], target: SyncTarget) {
     if (!menu.length) return;
 
     const last = messages[messages.length - 1];
-    if (last?.role === "assistant") return;
-
-    const corpus = buildOrderInferenceCorpusForDraft(messages, draftEpochMs, wakeWord);
+    let corpus = buildOrderInferenceCorpusForDraft(messages, draftEpochMs, wakeWord);
+    if (last?.role === "assistant") {
+      const assistVisible = stripAssistantTags(last.content);
+      if (!assistantConfirmsOrderItems(assistVisible)) return;
+      const userCorpus = buildOrderInferenceCorpusForDraft(
+        messages.slice(0, -1),
+        draftEpochMs,
+        wakeWord,
+      );
+      corpus = `${userCorpus} ${assistVisible}`.replace(/\s+/g, " ").trim();
+    }
     const inferred = collapseVariantLines(
       inferLineItemsFromCorpus(corpus, menu.filter((m) => m.available !== false)),
       menu,

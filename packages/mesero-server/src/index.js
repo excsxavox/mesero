@@ -24,6 +24,7 @@ import {
   applyQtyToDraftLines,
   filterAmbiguousMenuLines,
   findAmbiguousProductGroups,
+  inferMenuLinesFromAssistantConfirmation,
   inferMenuLinesFromText,
   mergeDraftItemLists,
 } from "./orderAmbiguity.js";
@@ -2175,7 +2176,11 @@ app.post("/api/chat/complete", async (req, res) => {
       }
     }
     // Solo DRAFT_JSON + lo que dijo el cliente; no inferir del texto visible del asistente (evita llenar el pedido al listar el menú).
-    draftItems = mergeDraftItemLists(draftItems, inferMenuLinesFromText(orderCorpus, menu));
+    draftItems = mergeDraftItemLists(
+      draftItems,
+      inferMenuLinesFromText(orderCorpus, menu),
+      inferMenuLinesFromAssistantConfirmation(content, menu),
+    );
     draftItems = applyQtyToDraftLines(draftItems, menu, orderCorpus, content);
     draftAmbiguous = findAmbiguousProductGroups(lastUser, menu);
     if (draftAmbiguous.length === 0) {

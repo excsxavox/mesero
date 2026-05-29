@@ -149,6 +149,20 @@ function fullNameMatch(nm: string, hay: string): { ok: boolean; idx: number } {
   return { ok: false, idx: -1 };
 }
 
+/** «choclo» coincide con «Choclo con queso» si es el único plato con esa palabra principal. */
+function matchesByPrimaryToken(m: MenuItem, hay: string, menu: MenuItem[]): boolean {
+  const tokens = significantTokens(fold(m.name));
+  if (tokens.length < 2) return false;
+  const head = tokens[0]!;
+  if (head.length < 4 || !tokenInHay(hay, head)) return false;
+  const candidates = menu.filter((other) => {
+    if (other.available === false) return false;
+    const ot = significantTokens(fold(other.name));
+    return ot[0] === head && tokenInHay(hay, head);
+  });
+  return candidates.length === 1 && candidates[0]!.id === m.id;
+}
+
 /** Cantidad mencionada antes del nombre del plato (ej. «dos arroces» → 2). */
 export function qtyForMenuItemInHay(text: string, itemName: string): number {
   const hay = expandedHay(text);
@@ -213,6 +227,15 @@ function scoreMenuItem(m: MenuItem, hay: string, menu: MenuItem[]): { score: num
 
   const tokens = significantTokens(nm);
   if (tokens.length === 0) return { score: 0, qty: 1 };
+
+  if (matchesByPrimaryToken(m, hay, menu)) {
+    const head = tokens[0]!;
+    const idx = hay.search(tokenBoundaryRegex(head));
+    return {
+      score: 1000,
+      qty: idx >= 0 ? qtyBeforeIndex(hay, idx) : qtyForMenuItemInHay(hay, m.name),
+    };
+  }
 
   if (tokens.length === 1 && SIDE_INGREDIENT_WORDS.has(tokens[0]!) && !userExplicitlyOrdersSide(tokens[0]!, hay)) {
     return { score: 0, qty: 1 };

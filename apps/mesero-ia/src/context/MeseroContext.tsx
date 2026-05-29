@@ -26,6 +26,9 @@ import { speechLocaleFromConversation } from "../lib/speechLocale";
 import type { ConfirmedBundle, DraftAmbiguousGroup, DraftLineInput } from "../lib/orderDisplayLines";
 import { mergeDraftInputs } from "../lib/orderDisplayLines";
 import { buildOrderInferenceCorpusForDraft, buildUserOrderCorpus } from "../lib/orderDraftCorpus";
+import { assistantConfirmsOrderItems, stripAssistantTags } from "../lib/orderDraftConfirm";
+import { inferLineItemsFromCorpus } from "../lib/inferLineItems";
+import { collapseVariantLines } from "../lib/variantCollapse";
 import type { MenuItem, Settings } from "../lib/types";
 import { applyKioskTableFromUrl } from "../lib/kioskTable";
 import { clampSelectedTable, formatTableLabel, normalizeTableCount } from "../lib/tables";
@@ -111,6 +114,8 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
   const pendingVoiceRef = useRef<string | null>(null);
   const confirmedRef = useRef(confirmed);
   confirmedRef.current = confirmed;
+  const syncMenuRef = useRef(syncMenu);
+  syncMenuRef.current = syncMenu;
 
   const confirmedOrderIds = useMemo(() => confirmed.map((c) => c.id), [confirmed]);
 
@@ -318,18 +323,35 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         });
         setMessages((m) => [...m, { role: "assistant", content: res.content, at: new Date().toISOString() }]);
         playAssistantVoice(res.content, next);
-        if (Array.isArray(res.draftItems) && res.draftItems.length > 0) {
-          const incoming: DraftLineInput[] = res.draftItems.map((it) => ({
-            menuItemId: it.menuItemId,
-            name: it.name,
-            qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
-          }));
-          setPendingDraft(incoming);
-          setTouchCart({});
-        }
+        const incoming: DraftLineInput[] = Array.isArray(res.draftItems)
+          ? res.draftItems.map((it) => ({
+              menuItemId: it.menuItemId,
+              name: it.name,
+              qty: Math.max(1, Math.min(99, Math.floor(it.qty) || 1)),
+            }))
+          : [];
+        const assistVisible = stripAssistantTags(res.content);
+        const userCorpus = buildUserOrderCorpus(next, draftEpochMs, wakeWord);
+        const inferCorpus = assistantConfirmsOrderItems(assistVisible)
+          ? `${userCorpus} ${assistVisible}`.replace(/\s+/g, " ").trim()
+          : userCorpus;
+        const menuForInfer = syncMenuRef.current.filter((m) => m.available !== false);
+        setPendingDraft((prev) => {
+          let merged = mergeDraftInputs(prev, incoming);
+          if (menuForInfer.length && inferCorpus) {
+            const inferred = collapseVariantLines(
+              inferLineItemsFromCorpus(inferCorpus, menuForInfer),
+              syncMenuRef.current,
+              inferCorpus,
+            );
+            merged = mergeDraftInputs(merged, inferred);
+          }
+          return merged;
+        });
+        if (incoming.length > 0) setTouchCart({});
         if (Array.isArray(res.draftAmbiguous) && res.draftAmbiguous.length > 0) {
           setPendingAmbiguous(res.draftAmbiguous);
-        } else if (Array.isArray(res.draftItems) && res.draftItems.length > 0) {
+        } else if (incoming.length > 0) {
           setPendingAmbiguous([]);
         }
         if (res.paymentFlow?.phase === "ready") {
@@ -365,7 +387,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
         window.setTimeout(flushPendingVoice, 450);
       }
     },
-    [messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable, flushPendingVoice],
+    [messages, playAssistantVoice, needsMandatoryPasswordSetup, selectedTable, flushPendingVoice, draftEpochMs, wakeWord],
   );
 
   sendRef.current = sendWithText;
