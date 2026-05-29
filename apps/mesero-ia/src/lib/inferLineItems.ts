@@ -1,5 +1,6 @@
 import type { MenuItem } from "./types";
 import { collapseVariantLines } from "./variantCollapse";
+import { hasRepeatOrderPhrase, qtyForMenuItemInHay as qtyFromHay } from "./menuItemQty";
 
 function fold(s: string) {
   return s
@@ -163,28 +164,8 @@ function matchesByPrimaryToken(m: MenuItem, hay: string, menu: MenuItem[]): bool
   return candidates.length === 1 && candidates[0]!.id === m.id;
 }
 
-/** Cantidad mencionada antes del nombre del plato (ej. «dos arroces» → 2). */
-export function qtyForMenuItemInHay(text: string, itemName: string): number {
-  const hay = expandedHay(text);
-  if (!hay) return 1;
-  let maxQ = 1;
-  for (const variant of nameVariantsForHay(itemName)) {
-    let pos = 0;
-    while (pos < hay.length) {
-      const idx = hay.indexOf(variant, pos);
-      if (idx === -1) break;
-      const charBefore = idx > 0 ? hay[idx - 1]! : " ";
-      const charAfter = idx + variant.length < hay.length ? hay[idx + variant.length]! : " ";
-      const boundaryBefore = !/\p{L}|\p{N}/u.test(charBefore);
-      const boundaryAfter = !/\p{L}|\p{N}/u.test(charAfter);
-      if (boundaryBefore && boundaryAfter) {
-        maxQ = Math.max(maxQ, qtyBeforeIndex(hay, idx));
-      }
-      pos = idx + Math.max(1, variant.length);
-    }
-  }
-  return maxQ;
-}
+/** Cantidad total en el corpus (suma «una coca» + «otra coca» → 2). Reexportada desde menuItemQty. */
+export { hasRepeatOrderPhrase, qtyForMenuItemInHay } from "./menuItemQty";
 
 function userExplicitlyOrdersSide(word: string, hay: string): boolean {
   const w = word.replace(/s$/, "");
@@ -233,7 +214,7 @@ function scoreMenuItem(m: MenuItem, hay: string, menu: MenuItem[]): { score: num
     const idx = hay.search(tokenBoundaryRegex(head));
     return {
       score: 1000,
-      qty: idx >= 0 ? qtyBeforeIndex(hay, idx) : qtyForMenuItemInHay(hay, m.name),
+      qty: idx >= 0 ? qtyBeforeIndex(hay, idx) : qtyFromHay(hay, m.name, m),
     };
   }
 
@@ -394,7 +375,7 @@ export function inferLineItemsFromCorpus(corpus: string, menu: MenuItem[]) {
     if (seen.has(it.menuItemId)) continue;
     seen.add(it.menuItemId);
     const m = menu.find((x) => x.id === it.menuItemId);
-    const qty = m ? Math.max(it.qty, qtyForMenuItemInHay(hay, m.name)) : it.qty;
+    const qty = m ? Math.max(it.qty, qtyFromHay(hay, m.name, m)) : it.qty;
     out.push({ menuItemId: it.menuItemId, name: it.name, qty });
   }
 

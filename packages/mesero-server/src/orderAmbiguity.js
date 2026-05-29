@@ -53,8 +53,8 @@ function clampQty(n) {
   return Math.min(99, Math.floor(n));
 }
 
-function qtyBeforeIndex(hay, idx) {
-  const before = hay.slice(Math.max(0, idx - 32), idx);
+function mentionQtyAt(hay, idx) {
+  const before = hay.slice(Math.max(0, idx - 40), idx);
   const m1 = before.match(/(\d{1,2})\s*[x×]\s*$/i);
   if (m1) return clampQty(parseInt(m1[1], 10));
   const m2 = before.match(/(\d{1,2})\s+$/);
@@ -62,7 +62,50 @@ function qtyBeforeIndex(hay, idx) {
   for (const [w, q] of Object.entries(SPANISH_QTY)) {
     if (new RegExp(`\\b${w}\\s+$`, "i").test(before)) return q;
   }
+  if (/\b(otra|otro|otras|otros|mas|más|another)\s+$/i.test(before)) return 1;
   return 1;
+}
+
+function qtyBeforeIndex(hay, idx) {
+  return mentionQtyAt(hay, idx);
+}
+
+/** «otra coca», «otro arroz» — pide sumar una unidad más del mismo ítem. */
+export function hasRepeatOrderPhrase(hay, itemName) {
+  const h = expandedHay(hay);
+  if (!h || !/\b(otra|otro|otras|otros|mas|más|another)\b/.test(h)) return false;
+  if (isCocaColaProduct(itemName) && /\b(coca|cola)\b/.test(h)) {
+    if (/\bpersonal\b/.test(h) && /\b500\s*ml\b/.test(fold(itemName))) return true;
+    if (sizeHintsInHay(itemName, h)) return true;
+  }
+  for (const variant of nameVariantsForHay(itemName)) {
+    const esc = variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b(otra|otro|otras|otros|mas|más|another)\\s+(?:\\w+\\s+){0,6}${esc}\\b`, "i").test(h)) {
+      return true;
+    }
+  }
+  const head = significantTokens(itemName)[0];
+  if (head && head.length >= 4) {
+    const esc = head.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b(otra|otro|otras|otros|mas|más|another)\\s+(?:\\w+\\s+){0,6}${esc}\\b`, "i").test(h)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function countCocaPersonalMentions(hay) {
+  if (!/\bpersonal\b/.test(hay)) return 0;
+  let total = 0;
+  const re = /\b(?:otra|otro|otras|otros|mas|más|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|\d{1,2})\s+(?:coca\s*cola|cocacola|coca)(?:\s+personal)?\b/gi;
+  let m;
+  while ((m = re.exec(hay)) !== null) {
+    const idx = m.index;
+    const word = m[0].split(/\s+/)[0].toLowerCase();
+    const q = SPANISH_QTY[word] ?? (/\d+/.test(word) ? clampQty(parseInt(word, 10)) : 1);
+    total += q;
+  }
+  return total;
 }
 
 /** Variantes del nombre en texto hablado (arroz → arroces). */
@@ -78,11 +121,11 @@ function nameVariantsForHay(itemName) {
   return [...out];
 }
 
-/** Cantidad mencionada antes del nombre del plato en el corpus (ej. «dos arroces» → 2). */
-export function qtyForMenuItemInHay(text, itemName) {
+/** Cantidad total mencionada en el corpus (suma «una coca» + «otra coca» → 2). */
+export function qtyForMenuItemInHay(text, itemName, menuItem) {
   const hay = expandedHay(text);
   if (!hay) return 1;
-  let maxQ = 1;
+  let total = 0;
   for (const variant of nameVariantsForHay(itemName)) {
     let pos = 0;
     while (pos < hay.length) {
@@ -93,24 +136,37 @@ export function qtyForMenuItemInHay(text, itemName) {
       const boundaryBefore = !/\p{L}|\p{N}/u.test(charBefore);
       const boundaryAfter = !/\p{L}|\p{N}/u.test(charAfter);
       if (boundaryBefore && boundaryAfter) {
-        maxQ = Math.max(maxQ, qtyBeforeIndex(hay, idx));
+        total += mentionQtyAt(hay, idx);
       }
       pos = idx + Math.max(1, variant.length);
     }
   }
-  return maxQ;
+  if (
+    menuItem &&
+    isCocaColaProduct(menuItem.name) &&
+    /\b500\s*ml\b/.test(fold(menuItem.name)) &&
+    /\bpersonal\b/.test(hay)
+  ) {
+    total = Math.max(total, countCocaPersonalMentions(hay));
+  }
+  return Math.max(1, total);
 }
 
 /** Ajusta cantidades del borrador según lo que dijo el cliente o confirmó el mesero en voz. */
 export function applyQtyToDraftLines(lines, menu, ...textParts) {
-  const hay = expandedHay(textParts.filter(Boolean).join(" "));
-  if (!hay || !Array.isArray(lines)) return lines ?? [];
+  const parts = textParts.filter(Boolean);
+  const fullHay = expandedHay(parts.join(" "));
+  const lastHay = expandedHay(parts[parts.length - 1] ?? "");
+  if (!fullHay || !Array.isArray(lines)) return lines ?? [];
   return lines.map((line) => {
     const mi = menu.find((m) => m.id === line.menuItemId);
     if (!mi) return line;
-    const fromText = qtyForMenuItemInHay(hay, mi.name);
     const prev = Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1));
-    return { ...line, qty: Math.max(prev, fromText) };
+    let qty = Math.max(prev, qtyForMenuItemInHay(fullHay, mi.name, mi));
+    if (hasRepeatOrderPhrase(lastHay, mi.name)) {
+      qty = Math.max(qty, prev + 1);
+    }
+    return { ...line, qty: Math.min(99, qty) };
   });
 }
 
@@ -367,7 +423,7 @@ export function inferMenuLinesFromText(text, menu) {
   for (const m of menu) {
     if (m.available === false) continue;
     if (lineMatchesUserText(m, hay, menu)) {
-      lines.push({ menuItemId: m.id, name: m.name, qty: qtyForMenuItemInHay(hay, m.name) });
+      lines.push({ menuItemId: m.id, name: m.name, qty: qtyForMenuItemInHay(hay, m.name, m) });
     }
   }
   return collapseVariantLines(

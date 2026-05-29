@@ -337,14 +337,14 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
           : userCorpus;
         const menuForInfer = syncMenuRef.current.filter((m) => m.available !== false);
         setPendingDraft((prev) => {
-          let merged = mergeDraftInputs(prev, incoming);
+          let merged = mergeDraftInputs(prev, incoming, { lastUtterance: inferCorpus });
           if (menuForInfer.length && inferCorpus) {
             const inferred = collapseVariantLines(
               inferLineItemsFromCorpus(inferCorpus, menuForInfer),
               syncMenuRef.current,
               inferCorpus,
             );
-            merged = mergeDraftInputs(merged, inferred);
+            merged = mergeDraftInputs(merged, inferred, { lastUtterance: inferCorpus });
           }
           return merged;
         });

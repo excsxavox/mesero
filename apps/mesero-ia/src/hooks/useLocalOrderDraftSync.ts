@@ -74,7 +74,7 @@ export function useLocalOrderDraftSync(menu: MenuItem[], target: SyncTarget) {
     setPendingDraft((prev) => {
       const afterRemoval = applyRemovalsFromLastUser(prev, messages, menu, wakeWord);
       if (inferred.length === 0) return afterRemoval;
-      return mergeDraftInputs(afterRemoval, inferred);
+      return mergeDraftInputs(afterRemoval, inferred, { lastUtterance: corpus });
     });
 
     setPendingAmbiguous((prev) => {

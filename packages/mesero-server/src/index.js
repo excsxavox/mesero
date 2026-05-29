@@ -1206,7 +1206,7 @@ Mientras el cliente arma el pedido SIN confirmación final, incluye SIEMPRE al f
 con TODOS los platos que el cliente pidió o aceptó en este pedido en construcción. Usa el menuItemId exacto del menú de arriba (el id entre corchetes) que corresponda al nombre del plato que mencionó el cliente — no inventes ids ni confundas platos (ej. si pidió habas/choclo, no pongas arroz). Si aún no hay plato concreto, {"items":[]}. No incluyas sugerencias que el cliente no aceptó. Si el cliente solo pregunta qué lleva su pedido o pide un resumen, NO agregues platos nuevos al DRAFT_JSON: repite en voz lo ya pedido y deja el mismo DRAFT_JSON (o {"items":[]} si aún no pidió nada).
 IMPORTANTE — productos con variantes: si el cliente pide algo genérico (ej. «un jugo», «una cola», «una cerveza», «un agua») y en el menú hay varias opciones, NO pongas ninguna variante en DRAFT_JSON. Pregunta en voz cuál prefiere nombrando 2-3 opciones que aparezcan EXACTAMENTE en el menú de arriba (usa los nombres tal cual están escritos, sin inventar sabores, tamaños ni presentaciones que no existan en la carta). Solo agrega UNA línea cuando el cliente ya especificó la variante o eligió una de las opciones reales del menú.
 Si el cliente pide algo genérico pero en el menú solo hay UN producto de ese tipo, agrégalo directamente a DRAFT_JSON sin preguntar variante.
-«Coca Cola personal» o «personal» = la variante de 500 ml del menú. «Dos arroces» = qty 2 en el ítem Arroz. El DRAFT_JSON debe coincidir con lo que dices en voz (mismos ítems, mismas cantidades, una sola variante de gaseosa).
+«Coca Cola personal» o «personal» = la variante de 500 ml del menú. «Dos arroces» = qty 2 en el ítem Arroz. «Otra coca» o «otra [mismo plato]» = suma 1 a la cantidad ya pedida de ese ítem en DRAFT_JSON. El DRAFT_JSON debe coincidir con lo que dices en voz (mismos ítems, mismas cantidades, una sola variante de gaseosa).
 
 Para registrar un pedido confirmado, cuando el cliente confirme explícitamente, incluye al final un bloque JSON en una sola línea con este formato exacto:
 <<<ORDER_JSON>>>{"table":"Mesa X o vacío","items":[{"menuItemId":"m1","qty":2,"notes":"sin cebolla"}],"notes":"notas generales"}<<<END_ORDER_JSON>>>
@@ -2185,6 +2185,14 @@ app.post("/api/chat/complete", async (req, res) => {
     draftAmbiguous = findAmbiguousProductGroups(lastUser, menu);
     if (draftAmbiguous.length === 0) {
       draftAmbiguous = findAmbiguousProductGroups(orderCorpus, menu);
+    }
+    if (
+      draftItems.some((line) => {
+        const mi = menu.find((m) => m.id === line.menuItemId);
+        return mi && /\b(coca|cola|pepsi|fiora|gaseosa|vanti)\b/i.test(String(mi.name ?? "").toLowerCase());
+      })
+    ) {
+      draftAmbiguous = draftAmbiguous.filter((g) => g.label !== "Gaseosa");
     }
   }
 

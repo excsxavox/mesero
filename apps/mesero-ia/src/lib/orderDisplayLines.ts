@@ -1,4 +1,5 @@
 import type { MenuItem, OrderLine } from "./types";
+import { applyRepeatQtyBump } from "./menuItemQty";
 import { inferLineItemsFromCorpus } from "./inferLineItems";
 
 export type DisplayLine = { menuItemId: string; name: string; qty: number; unitPrice: number | null };
@@ -33,16 +34,22 @@ export type DraftAmbiguousGroup = { label: string; options: string[] };
 export function mergeDraftInputs(
   prev: DraftLineInput[] | undefined,
   incoming: DraftLineInput[] | undefined,
+  opts?: { lastUtterance?: string },
 ): DraftLineInput[] {
   const map = new Map<string, DraftLineInput>();
   for (const it of prev ?? []) map.set(it.menuItemId, it);
+  const lastUtterance = opts?.lastUtterance ?? "";
   for (const it of incoming ?? []) {
     const qty = Math.max(1, Math.min(99, Math.floor(it.qty) || 1));
     const prevLine = map.get(it.menuItemId);
+    const name = it.name || prevLine?.name || it.menuItemId;
+    const mergedQty = prevLine
+      ? applyRepeatQtyBump(prevLine.qty, qty, lastUtterance, name)
+      : qty;
     map.set(it.menuItemId, {
       menuItemId: it.menuItemId,
-      name: it.name || prevLine?.name || it.menuItemId,
-      qty: prevLine ? Math.max(prevLine.qty, qty) : qty,
+      name,
+      qty: mergedQty,
     });
   }
   return [...map.values()];
