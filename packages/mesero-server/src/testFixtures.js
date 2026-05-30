@@ -20,13 +20,19 @@ export const TEST_MENU = [
  * Simula cómo el servidor arma draftItems tras /api/chat/complete.
  * @param {{ userCorpus: string; assistantText?: string; llmDraft?: { menuItemId: string; name: string; qty: number }[]; menu?: typeof TEST_MENU }} opts
  */
-export function buildDraftFromTurn({ userCorpus, assistantText = "", llmDraft = [], menu = TEST_MENU }) {
+export function buildDraftFromTurn({ userCorpus, assistantText = "", llmDraft = [], menu = TEST_MENU, lastUserHay = "" }) {
   let draftItems = mergeDraftItemLists(
     llmDraft,
     inferMenuLinesFromText(userCorpus, menu),
     inferMenuLinesFromAssistantConfirmation(assistantText, menu),
   );
-  draftItems = applyQtyToDraftLines(draftItems, menu, userCorpus, assistantText);
+  draftItems = applyQtyToDraftLines(
+    draftItems,
+    menu,
+    userCorpus,
+    assistantText,
+    lastUserHay || userCorpus,
+  );
   return collapseVariantLines(draftItems, menu, userCorpus || assistantText);
 }
 
@@ -42,10 +48,17 @@ export function buildDraftFromConversation(turns, menu = TEST_MENU) {
       assistantText: turn.assistant ?? "",
       llmDraft: turn.llmDraft ?? [],
       menu,
+      lastUserHay: turn.user ?? "",
     });
     if (turn.clientPrevDraft?.length) {
       draft = mergeDraftItemLists(turn.clientPrevDraft, draft);
-      draft = applyQtyToDraftLines(draft, menu, userCorpus, turn.assistant ?? "");
+      draft = applyQtyToDraftLines(
+        draft,
+        menu,
+        userCorpus,
+        turn.assistant ?? "",
+        turn.user ?? "",
+      );
     }
   }
 

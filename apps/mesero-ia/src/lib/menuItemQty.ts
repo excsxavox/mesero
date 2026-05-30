@@ -1,4 +1,5 @@
 import type { MenuItem } from "./types";
+import { assistantConfirmsOrderItems, stripAssistantTags } from "./orderDraftConfirm";
 
 function fold(s: string) {
   return String(s ?? "")
@@ -34,20 +35,37 @@ function clampQty(n: number) {
   return Math.min(99, Math.floor(n));
 }
 
+function addSpokenVariants(out: Set<string>, token: string) {
+  if (!token || token.length < 3) return;
+  out.add(token);
+  out.add(`${token}s`);
+  out.add(`${token}es`);
+  if (token.endsWith("z")) out.add(`${token.slice(0, -1)}ces`);
+}
+
+function significantTokens(name: string) {
+  return fold(name).split(/\s+/).filter((w) => w.length >= 3);
+}
+
 function nameVariantsForHay(itemName: string): string[] {
   const nm = fold(itemName).trim();
   if (!nm) return [];
   const out = new Set([nm]);
   if (!nm.includes(" ")) {
-    out.add(`${nm}s`);
-    out.add(`${nm}es`);
-    if (nm.endsWith("z")) out.add(`${nm.slice(0, -1)}ces`);
+    addSpokenVariants(out, nm);
+  } else {
+    const head = significantTokens(itemName)[0];
+    if (head && head.length >= 4) addSpokenVariants(out, head);
   }
   return [...out];
 }
 
-function significantTokens(name: string) {
-  return fold(name).split(/\s+/).filter((w) => w.length >= 3);
+function corpusWithoutTail(fullHay: string, tailHay: string) {
+  if (!tailHay || !fullHay) return fullHay ?? "";
+  const f = expandedHay(fullHay);
+  const t = expandedHay(tailHay);
+  if (!t || !f.includes(t)) return f;
+  return f.slice(0, f.lastIndexOf(t)).trim();
 }
 
 function isCocaColaProduct(name: string) {
@@ -142,17 +160,78 @@ export function qtyForMenuItemInHay(text: string, itemName: string, menuItem?: M
   return Math.max(1, total);
 }
 
+export function resolveItemQty(opts: {
+  userHay: string;
+  lastUserHay?: string;
+  assistantHay?: string;
+  itemName: string;
+  menuItem?: MenuItem;
+  itemMentionedIn?: (hay: string) => boolean;
+  prevQty?: number;
+}) {
+  const prev = Math.max(1, Math.min(99, Math.floor(Number(opts.prevQty)) || 1));
+  const full = expandedHay(opts.userHay ?? "");
+  const last = expandedHay(opts.lastUserHay ?? "");
+  const assistRaw = String(opts.assistantHay ?? "");
+  const assist = expandedHay(stripAssistantTags(assistRaw));
+  const mentioned = opts.itemMentionedIn ?? (() => true);
+
+  let fromUser = full ? qtyForMenuItemInHay(full, opts.itemName, opts.menuItem) : 1;
+
+  if (last && mentioned(last)) {
+    const prevPart = corpusWithoutTail(full, last);
+    const prevSum = prevPart ? qtyForMenuItemInHay(prevPart, opts.itemName, opts.menuItem) : 0;
+    const lastQty = qtyForMenuItemInHay(last, opts.itemName, opts.menuItem);
+    if (hasRepeatOrderPhrase(last, opts.itemName)) {
+      fromUser = prevSum + Math.max(1, lastQty);
+    } else if (lastQty > prevSum) {
+      fromUser = lastQty;
+    } else {
+      fromUser = Math.max(prevSum, lastQty);
+    }
+  }
+
+  let qty = Math.max(prev, fromUser);
+
+  if (assist && assistantConfirmsOrderItems(assistRaw) && mentioned(assist)) {
+    const fromAssist = qtyForMenuItemInHay(assist, opts.itemName, opts.menuItem);
+    if (fromAssist > 0) {
+      if (!hasRepeatOrderPhrase(last, opts.itemName) && fromUser > fromAssist) {
+        qty = Math.max(prev, fromAssist);
+      } else {
+        qty = Math.max(prev, fromUser, fromAssist);
+      }
+    }
+  }
+  if (hasRepeatOrderPhrase(assist, opts.itemName) && !hasRepeatOrderPhrase(last, opts.itemName) && fromUser <= prev) {
+    qty = Math.max(qty, prev + 1);
+  }
+
+  return Math.min(99, qty);
+}
+
 export function applyRepeatQtyBump(
   prevQty: number,
   nextQty: number,
   lastUtterance: string,
   itemName: string,
   menuItem?: MenuItem,
+  opts?: { userHay?: string; lastUserHay?: string; assistantHay?: string; itemMentionedIn?: (hay: string) => boolean },
 ) {
+  if (opts?.userHay) {
+    return resolveItemQty({
+      userHay: opts.userHay,
+      lastUserHay: opts.lastUserHay,
+      assistantHay: opts.assistantHay,
+      itemName,
+      menuItem,
+      itemMentionedIn: opts.itemMentionedIn,
+      prevQty: prevQty,
+    });
+  }
   const prev = Math.max(1, prevQty);
   const next = Math.max(1, nextQty);
   let qty = Math.max(prev, next);
-  // El LLM suele mandar qty 1 otra vez; la inferencia ya trae el total correcto.
   if (hasRepeatOrderPhrase(lastUtterance, itemName) && next === 1 && prev >= 1) {
     qty = Math.max(qty, prev + 1);
   }

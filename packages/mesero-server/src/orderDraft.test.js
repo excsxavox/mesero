@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyQtyToDraftLines,
+  findAmbiguousProductGroups,
   hasRepeatOrderPhrase,
   inferMenuLinesFromAssistantConfirmation,
   inferMenuLinesFromText,
   mergeDraftItemLists,
   qtyForMenuItemInHay,
+  resolveItemQty,
 } from "./orderAmbiguity.js";
 import {
   TEST_MENU,
@@ -107,12 +109,44 @@ describe("mergeDraftItemLists", () => {
   });
 });
 
+describe("resolveItemQty", () => {
+  it("no suma dos arroces + cinco arroces → 7; usa el último turno (5)", () => {
+    const qty = resolveItemQty({
+      userHay: "dos arroces cinco arroces",
+      lastUserHay: "cinco arroces",
+      assistantHay: "Listo, cinco arroces anotados",
+      itemName: "Arroz",
+      menuItem: ARROZ,
+      menu: TEST_MENU,
+      prevQty: 1,
+    });
+    expect(qty).toBe(5);
+  });
+
+  it("detecta cantidad en platos compuestos por palabra principal (dos caldos)", () => {
+    const caldo = { id: "caldo", name: "Caldo de Gallina Criolla", available: true };
+    expect(qtyForMenuItemInHay("dos caldos de gallina", "Caldo de Gallina Criolla", caldo)).toBe(2);
+  });
+
+  it("otros tres arroces suma al pedido previo", () => {
+    const qty = resolveItemQty({
+      userHay: "dos arroces otros tres arroces",
+      lastUserHay: "otros tres arroces",
+      itemName: "Arroz",
+      menuItem: ARROZ,
+      menu: TEST_MENU,
+      prevQty: 2,
+    });
+    expect(qty).toBe(5);
+  });
+});
+
 describe("applyQtyToDraftLines", () => {
   it("incrementa a 2 cuando Karen dice otra coca y el borrador tenía 1", () => {
     const draft = [{ menuItemId: "coca500", name: "Coca Cola 500 ml", qty: 1 }];
     const corpus = "una coca cola personal";
     const assist = "Listo, otra Coca Cola personal añadida";
-    const out = applyQtyToDraftLines(draft, TEST_MENU, corpus, assist);
+    const out = applyQtyToDraftLines(draft, TEST_MENU, corpus, assist, "una coca cola personal");
     expect(qtyOf(out, "coca500")).toBe(2);
   });
 
@@ -120,7 +154,7 @@ describe("applyQtyToDraftLines", () => {
     const draft = [{ menuItemId: "coca500", name: "Coca Cola 500 ml", qty: 1 }];
     const corpus = "una coca cola personal otra coca cola personal";
     const assist = "Listo, otra Coca Cola personal añadida";
-    const out = applyQtyToDraftLines(draft, TEST_MENU, corpus, assist);
+    const out = applyQtyToDraftLines(draft, TEST_MENU, corpus, assist, "otra coca cola personal");
     expect(qtyOf(out, "coca500")).toBe(2);
   });
 });
@@ -142,6 +176,21 @@ describe("buildDraftFromTurn (pipeline servidor)", () => {
     });
     expect(qtyOf(draft, "arroz")).toBe(2);
     expect(hasItem(draft, "choclo")).toBe(true);
+  });
+});
+
+describe("findAmbiguousProductGroups — jugos", () => {
+  const juiceMenu = [
+    { id: "j1", name: "Jarra Grande", category: "Jugos Naturales", available: true },
+    { id: "j2", name: "Vaso", category: "Jugos Naturales", available: true },
+  ];
+
+  it("detecta jugos por categoría cuando el cliente pide un jugo genérico", () => {
+    const groups = findAmbiguousProductGroups("karen quiero un jugo", juiceMenu);
+    const jugo = groups.find((g) => g.label === "Jugo");
+    expect(jugo).toBeDefined();
+    expect(jugo.options).toContain("Jarra Grande");
+    expect(jugo.options).toContain("Vaso");
   });
 });
 
