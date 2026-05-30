@@ -54,7 +54,6 @@ export function OrderSummaryCard({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const lines = useMemo(() => mergedActiveLines(menu, corpus, touchCart), [menu, corpus, touchCart]);
   const total = orderTotal(lines);
-  const menuById = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
   const hasOrderDraft =
     lines.length > 0 || Boolean(touchCart && Object.keys(touchCart).length > 0) || confirmed.length > 0;
 
@@ -120,23 +119,8 @@ export function OrderSummaryCard({
         <ul className="mt-3 space-y-2.5">
           {lines.map((it) => {
             const sub = lineSubtotal(it);
-            const m = menuById.get(it.menuItemId);
-            const img = (m?.imageUrl ?? "").trim();
             return (
               <li key={it.menuItemId} className="flex items-center gap-2.5">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-mesero-muted ring-1 ring-mesero-line/15">
-                  {img ? (
-                    <img
-                      src={img}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-lg text-mesero-accent/35">{reception ? "🏝️" : "🍽️"}</div>
-                  )}
-                </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
                   <p className="text-xs font-semibold text-amber-400">×{it.qty}</p>

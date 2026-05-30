@@ -10,7 +10,6 @@ import {
   type DraftLineInput,
 } from "../../lib/orderDisplayLines";
 import { orderStatusBadgeClass, orderStatusLabel } from "../../lib/orderStatusLabels";
-import { MenuItemImage } from "./MenuItemImage";
 
 type Props = {
   menu: MenuItem[];
@@ -45,21 +44,15 @@ function BagIcon() {
 
 function OrderLinesList({
   lines,
-  menuById,
 }: {
   lines: ReturnType<typeof mergedActiveLines>;
-  menuById: Map<string, MenuItem>;
 }) {
   return (
     <ul className="space-y-2.5">
       {lines.map((it) => {
         const sub = lineSubtotal(it);
-        const m = menuById.get(it.menuItemId);
         return (
           <li key={it.menuItemId} className="flex items-center gap-2.5">
-            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-mesero-muted ring-1 ring-mesero-line/15">
-              <MenuItemImage src={m?.imageUrl} />
-            </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-mesero-text">{it.name}</p>
               <p className="text-xs font-semibold text-mesero-accent">×{it.qty}</p>
@@ -92,7 +85,6 @@ export function OrderSummaryCard({
     [menu, corpus, touchCart, pendingDraft],
   );
   const total = orderTotal(lines);
-  const menuById = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
   const hasOrderDraft =
     lines.length > 0 || Boolean(touchCart && Object.keys(touchCart).length > 0) || confirmed.length > 0;
 
@@ -120,7 +112,7 @@ export function OrderSummaryCard({
             Por confirmar
           </p>
           {lines.length > 0 ? (
-            <OrderLinesList lines={lines} menuById={menuById} />
+            <OrderLinesList lines={lines} />
           ) : (pendingDraft?.length ?? 0) > 0 ? (
             <ul className="space-y-2.5">
               {pendingDraft!.map((it) => (
