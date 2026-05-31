@@ -113,10 +113,6 @@ function sizeHintsInHay(name: string, hay: string) {
   return false;
 }
 
-function itemMatchesGenericHint(hint: { matchItem: (name: string, category?: string) => boolean }, m: MenuItem) {
-  return hint.matchItem(m.name, m.category);
-}
-
 const GENERIC_PRODUCT_HINTS = [
   {
     label: "Gaseosa",
@@ -131,12 +127,12 @@ const GENERIC_PRODUCT_HINTS = [
   {
     label: "Jugo",
     re: /\b(jugo|zumo|juguito)\b/i,
-    matchItem: (name: string, category = "") => /\b(jugos?|zumos?)\b/i.test(fold(`${name} ${category}`)),
+    matchItem: (name: string) => /\b(jugo|zumo)\b/i.test(fold(name)),
   },
   {
     label: "Agua",
     re: /\b(agua)\b/i,
-    matchItem: (name: string, category = "") => /\b(agua)\b/i.test(fold(`${name} ${category}`)),
+    matchItem: (name: string) => /\b(agua)\b/i.test(fold(name)),
   },
 ];
 
@@ -145,7 +141,7 @@ function findGenericAmbiguousGroups(hay: string, menu: MenuItem[]) {
   const out: { label: string; options: string[] }[] = [];
   for (const hint of GENERIC_PRODUCT_HINTS) {
     if (!hint.re.test(hay)) continue;
-    const options = menu.filter((m) => m.available !== false && itemMatchesGenericHint(hint, m));
+    const options = menu.filter((m) => m.available !== false && hint.matchItem(m.name));
     if (options.length <= 1) continue;
     if (hint.label === "Gaseosa" && pickSingleSodaVariant(options, hay)) continue;
     const fullHits = options.filter((m) => fullNameInHay(m.name, hay));

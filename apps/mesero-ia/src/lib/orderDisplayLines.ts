@@ -1,6 +1,6 @@
 import type { MenuItem, OrderLine } from "./types";
 import { applyRepeatQtyBump } from "./menuItemQty";
-import { inferLineItemsFromCorpus, isMenuItemInCorpus } from "./inferLineItems";
+import { inferLineItemsFromCorpus } from "./inferLineItems";
 
 export type DisplayLine = { menuItemId: string; name: string; qty: number; unitPrice: number | null };
 
@@ -31,18 +31,10 @@ export type DraftLineInput = { menuItemId: string; name: string; qty: number };
 
 export type DraftAmbiguousGroup = { label: string; options: string[] };
 
-export type DraftMergeOpts = {
-  lastUtterance?: string;
-  menu?: MenuItem[];
-  userHay?: string;
-  lastUserHay?: string;
-  assistantHay?: string;
-};
-
 export function mergeDraftInputs(
   prev: DraftLineInput[] | undefined,
   incoming: DraftLineInput[] | undefined,
-  opts?: DraftMergeOpts,
+  opts?: { lastUtterance?: string; menu?: MenuItem[] },
 ): DraftLineInput[] {
   const map = new Map<string, DraftLineInput>();
   for (const it of prev ?? []) map.set(it.menuItemId, it);
@@ -52,25 +44,9 @@ export function mergeDraftInputs(
     const prevLine = map.get(it.menuItemId);
     const name = it.name || prevLine?.name || it.menuItemId;
     const menuItem = opts?.menu?.find((m) => m.id === it.menuItemId);
-    const mentionCheck =
-      menuItem && opts?.menu
-        ? (hay: string) => isMenuItemInCorpus(hay, menuItem, opts.menu!)
-        : undefined;
     const mergedQty = prevLine
-      ? applyRepeatQtyBump(prevLine.qty, qty, lastUtterance, name, menuItem, {
-          userHay: opts?.userHay,
-          lastUserHay: opts?.lastUserHay,
-          assistantHay: opts?.assistantHay,
-          itemMentionedIn: mentionCheck,
-        })
-      : opts?.userHay
-        ? applyRepeatQtyBump(1, qty, lastUtterance, name, menuItem, {
-            userHay: opts.userHay,
-            lastUserHay: opts?.lastUserHay,
-            assistantHay: opts?.assistantHay,
-            itemMentionedIn: mentionCheck,
-          })
-        : qty;
+      ? applyRepeatQtyBump(prevLine.qty, qty, lastUtterance, name, menuItem)
+      : qty;
     map.set(it.menuItemId, {
       menuItemId: it.menuItemId,
       name,

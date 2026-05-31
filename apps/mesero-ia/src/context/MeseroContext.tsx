@@ -343,13 +343,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
           ? `${lastUserMsg} ${assistVisible}`.trim()
           : lastUserMsg;
         const menuForInfer = syncMenuRef.current.filter((m) => m.available !== false);
-        const mergeOpts = {
-          lastUtterance: repeatHay,
-          menu: syncMenuRef.current,
-          userHay: inferCorpus,
-          lastUserHay: lastUserMsg,
-          assistantHay: assistantConfirmsOrderItems(assistVisible) ? assistVisible : "",
-        };
+        const mergeOpts = { lastUtterance: repeatHay, menu: syncMenuRef.current };
         setPendingDraft((prev) => {
           let merged = mergeDraftInputs(prev, incoming, mergeOpts);
           if (menuForInfer.length && inferCorpus) {
@@ -358,13 +352,7 @@ export function MeseroLayout({ children }: { children?: ReactNode }) {
               syncMenuRef.current,
               inferCorpus,
             );
-            const serverIds = new Set(incoming.map((it) => it.menuItemId));
-            const inferredOnly = incoming.length > 0
-              ? inferred.filter((it) => !serverIds.has(it.menuItemId))
-              : inferred;
-            if (inferredOnly.length > 0) {
-              merged = mergeDraftInputs(merged, inferredOnly, mergeOpts);
-            }
+            merged = mergeDraftInputs(merged, inferred, mergeOpts);
           }
           return merged;
         });

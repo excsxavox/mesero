@@ -7,6 +7,7 @@ import { assistantConfirmsOrderItems, stripAssistantTags } from "../lib/orderDra
 import { inferLineItemsFromCorpus } from "../lib/inferLineItems";
 import { mergeDraftInputs, type DraftLineInput } from "../lib/orderDisplayLines";
 import { stripWakeWordFromUtterance } from "../lib/speechLocale";
+import { stripWakeWordFromUtterance } from "../lib/speechLocale";
 import type { MeseroMsg } from "../lib/meseroSessionStorage";
 
 const REMOVE_RE =
@@ -76,19 +77,11 @@ export function useLocalOrderDraftSync(menu: MenuItem[], target: SyncTarget) {
       if (inferred.length === 0) return afterRemoval;
       const users = messages.filter((m) => m.role === "user");
       const lastUser = stripWakeWordFromUtterance(users[users.length - 1]?.content ?? "", wakeWord);
-      const assistVisible =
-        last?.role === "assistant" ? stripAssistantTags(last.content) : "";
       const repeatHay =
-        last?.role === "assistant" && assistantConfirmsOrderItems(assistVisible)
-          ? `${lastUser} ${assistVisible}`.trim()
+        last?.role === "assistant" && assistantConfirmsOrderItems(stripAssistantTags(last.content))
+          ? `${lastUser} ${stripAssistantTags(last.content)}`.trim()
           : lastUser;
-      return mergeDraftInputs(afterRemoval, inferred, {
-        lastUtterance: repeatHay,
-        menu,
-        userHay: corpus,
-        lastUserHay: lastUser,
-        assistantHay: assistantConfirmsOrderItems(assistVisible) ? assistVisible : "",
-      });
+      return mergeDraftInputs(afterRemoval, inferred, { lastUtterance: repeatHay, menu });
     });
 
     setPendingAmbiguous((prev) => {

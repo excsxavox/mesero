@@ -29,7 +29,6 @@ import {
   inferMenuLinesFromText,
   mergeDraftItemLists,
 } from "./orderAmbiguity.js";
-import { selectMenuItemsForPrompt } from "./menuScope.js";
 import {
   buildConversationPhaseHint,
   buildWaiterHospitalityBlock,
@@ -545,7 +544,7 @@ function buildOfflineAssistantReply(messages, store, menu, kioskTable = null, ki
   const stepNode = currentFlowStepNode(store.flow, turnIdx);
   const stepLine = formatFlowStepForGuest(stepNode, kioskTable);
   const wantPrices = userWantsPriceInfo(lastUser);
-  const { items: menuSlice } = selectMenuItemsForPrompt(messages, menu, categoriesForMenuInference(menu));
+  const { items: menuSlice } = selectMenuItemsForPrompt(messages, menu);
   const menuBrief = wantPrices ? formatMenuBriefByCategory(menuSlice) : formatMenuBriefByCategoryNoPrices(menuSlice);
   const noPriceFootEn =
     "\n\n(Prices are shown on the kiosk screen; I’m listing only names and categories here.)";
@@ -687,6 +686,116 @@ function formatMenuBriefByCategoryNoPrices(menu) {
 
 function stripDiacritics(s) {
   return String(s).normalize("NFD").replace(/\p{M}+/gu, "");
+}
+
+/** Últimos turnos del usuario (texto unido) para inferir categoría sin depender solo del último mensaje. */
+function recentUserTextForMenuScope(messages, maxTurns = 2) {
+  const users = messages.filter((m) => m.role === "user").slice(-maxTurns);
+  return users.map((m) => String(m.content ?? "")).join(" ");
+}
+
+function categoriesMentionedInText(text, categories) {
+  const t = stripDiacritics(String(text ?? "").toLowerCase());
+  const out = [];
+  for (const cat of categories) {
+    const c = stripDiacritics(cat.toLowerCase());
+    if (!c.trim()) continue;
+    if (t.includes(c)) {
+      out.push(cat);
+      continue;
+    }
+    if (c.length >= 4 && c.endsWith("s")) {
+      const singular = c.slice(0, -1);
+      if (t.includes(singular)) out.push(cat);
+    } else if (c.length >= 3 && !c.endsWith("s")) {
+      if (t.includes(`${c}s`)) out.push(cat);
+    }
+  }
+  return [...new Set(out)];
+}
+
+/** Palabras habituales → categorías configuradas (por subcadena en el nombre de categoría). */
+function categoriesFromKeywordHints(text, categories) {
+  const t = stripDiacritics(String(text ?? "").toLowerCase());
+  const hints = [
+    [/\b(postres?|dulces?|desserts?|helados?|tartas?)\b/i, /(postre|producto)/i],
+    [/\b(entradas?|starters?|ensaladas?|tapas?|aperitivos?)\b/i, /entrada/i],
+    [/\b(principales?|fuertes?|segundos?|pastas?|carnes?|pescados?|mains?)\b/i, /principal/i],
+    [/\b(bebidas?|drinks?|jugos?|cervezas?|vinos?|refrescos?)\b/i, /(bebida|producto)/i],
+    [/\b(paquetes?|combos?|menú ejecutivo|menu ejecutivo)\b/i, /paquete/i],
+    [/\b(servicios?|reservas?)\b/i, /servicio/i],
+  ];
+  const out = [];
+  for (const [re, hint] of hints) {
+    if (!re.test(t)) continue;
+    const hit = categories.find((c) => hint.test(stripDiacritics(String(c).toLowerCase())));
+    if (hit) out.push(hit);
+  }
+  return [...new Set(out)];
+}
+
+function categoriesFromMentionedDishNames(text, menu) {
+  const t = stripDiacritics(String(text ?? "").toLowerCase());
+  const cats = new Set();
+  for (const m of menu) {
+    const n = stripDiacritics(String(m.name ?? "").toLowerCase()).trim();
+    if (n.length < 3) continue;
+    if (t.includes(n)) cats.add(String(m.category || "General").trim() || "General");
+  }
+  return cats;
+}
+
+function userExplicitlyWantsFullMenuCatalog(scopeText, categories, menu) {
+  const t = stripDiacritics(String(scopeText ?? "").toLowerCase());
+  if (!t.trim()) return true;
+
+  const hasSpecificHint =
+    categoriesMentionedInText(scopeText, categories).length > 0 ||
+    categoriesFromKeywordHints(scopeText, categories).length > 0 ||
+    categoriesFromMentionedDishNames(scopeText, menu).size > 0;
+
+  if (/\b(todo|toda|completo|completa|everything|whole menu|entire menu)\b/i.test(t) && /\b(carta|menu|menú|list)\b/i.test(t)) {
+    return true;
+  }
+  if (/\b(carta|menu|menú)\b/i.test(t) && !hasSpecificHint) return true;
+  return false;
+}
+
+/**
+ * Reduce tokens: si el cliente se centra en categorías concretas, solo se envían esos platos al modelo.
+ * Si el mensaje es genérico o pide carta completa, menú entero.
+ */
+function selectMenuItemsForPrompt(messages, menu) {
+  const categories = categoriesForMenuInference(menu);
+  const scopeText = recentUserTextForMenuScope(messages, 2);
+
+  if (userExplicitlyWantsFullMenuCatalog(scopeText, categories, menu)) {
+    return { items: menu, scopeNote: "" };
+  }
+
+  const catSet = new Set([
+    ...categoriesMentionedInText(scopeText, categories),
+    ...categoriesFromKeywordHints(scopeText, categories),
+    ...categoriesFromMentionedDishNames(scopeText, menu),
+  ]);
+
+  if (catSet.size === 0) {
+    return { items: menu, scopeNote: "" };
+  }
+
+  const cats = [...catSet];
+  let items = menu.filter((m) => cats.includes(String(m.category || "").trim() || "General"));
+  if (items.length === 0) items = menu;
+
+  const others = categories.filter((c) => !catSet.has(c));
+  const scopeNote =
+    `\n\nALCANCE DEL CATÁLOGO (contexto acotado para ahorrar tokens): solo figuran platos de: ${cats.join(", ")}.` +
+    (others.length
+      ? ` Otras categorías del local no están listadas abajo: ${others.join(", ")}. Si el cliente pide otra sección, amplía según lo que diga.`
+      : "") +
+    ` No inventes platos fuera de esta lista.`;
+
+  return { items, scopeNote };
 }
 
 function buildLanguageInstructionsForPrompt() {
@@ -984,7 +1093,7 @@ function buildReceptionSystemPrompt(messages, menu, opts = {}) {
 
   const hasCatalog = Array.isArray(menu) && menu.length > 0;
   const { items: menuSlice, scopeNote } = hasCatalog
-    ? selectMenuItemsForPrompt(messages, menu, categoriesForMenuInference(menu))
+    ? selectMenuItemsForPrompt(messages, menu)
     : { items: [], scopeNote: "" };
   const catalogBlock = hasCatalog
     ? `\n\nCATÁLOGO DE TOURS Y PRODUCTOS DEL HOTEL (excursiones, spa, traslados, upgrades, experiencias — referencia con ids entre corchetes):
@@ -1032,11 +1141,7 @@ function buildSystemPrompt(messages, menu, opts = {}) {
     return buildReceptionSystemPrompt(messages, menu, opts);
   }
   const forceEnglish = Boolean(opts.forceEnglish);
-  const { items: menuSlice, scopeNote } = selectMenuItemsForPrompt(
-    messages,
-    menu,
-    categoriesForMenuInference(menu),
-  );
+  const { items: menuSlice, scopeNote } = selectMenuItemsForPrompt(messages, menu);
   const anyUnavailable = menu.some((m) => m.available === false);
   const menuText = formatMenuForSystemPrompt(menuSlice);
   const flowText = flowToPrompt(store.flow);
@@ -2077,7 +2182,7 @@ app.post("/api/chat/complete", async (req, res) => {
       inferMenuLinesFromText(orderCorpus, menu),
       inferMenuLinesFromAssistantConfirmation(content, menu),
     );
-    draftItems = applyQtyToDraftLines(draftItems, menu, orderCorpus, content, lastUser);
+    draftItems = applyQtyToDraftLines(draftItems, menu, orderCorpus, content);
     draftItems = collapseVariantLines(draftItems, menu, orderCorpus);
     draftAmbiguous = findAmbiguousProductGroups(lastUser, menu);
     if (draftAmbiguous.length === 0) {

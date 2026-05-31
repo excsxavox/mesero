@@ -22,30 +22,16 @@ function simulateClientDraftUpdate(
   prevDraft: { menuItemId: string; name: string; qty: number }[],
   incoming: { menuItemId: string; name: string; qty: number }[],
   inferCorpus: string,
-  lastUserHay: string,
-  assistantHay = "",
+  repeatHay: string,
 ) {
-  const repeatHay = assistantHay ? `${lastUserHay} ${assistantHay}`.trim() : lastUserHay;
-  const mergeOpts = {
-    lastUtterance: repeatHay,
-    menu: TEST_MENU,
-    userHay: inferCorpus,
-    lastUserHay,
-    assistantHay,
-  };
+  const mergeOpts = { lastUtterance: repeatHay, menu: TEST_MENU };
   let merged = mergeDraftInputs(prevDraft, incoming, mergeOpts);
   const inferred = collapseVariantLines(
     inferLineItemsFromCorpus(inferCorpus, TEST_MENU.filter((m) => m.available !== false)),
     TEST_MENU,
     inferCorpus,
   );
-  const serverIds = new Set(incoming.map((it) => it.menuItemId));
-  const inferredOnly = incoming.length > 0
-    ? inferred.filter((it) => !serverIds.has(it.menuItemId))
-    : inferred;
-  if (inferredOnly.length > 0) {
-    merged = mergeDraftInputs(merged, inferredOnly, mergeOpts);
-  }
+  merged = mergeDraftInputs(merged, inferred, mergeOpts);
   return merged;
 }
 
@@ -141,14 +127,12 @@ describe("simulateClientDraftUpdate (flujo completo cliente)", () => {
   it("turno 2: choclo agregado por Karen aunque LLM solo mande arroz", () => {
     const corpus1 = "dos arroces";
     const draft1 = simulateClientDraftUpdate([], [{ menuItemId: "arroz", name: "Arroz", qty: 2 }], corpus1, "dos arroces");
-    const corpus2 = `${corpus1} un choclo`;
-    const assist2 = "Listo, un choclo agregado";
+    const corpus2 = `${corpus1} un choclo Listo un choclo agregado`;
     const draft2 = simulateClientDraftUpdate(
       draft1,
       [{ menuItemId: "arroz", name: "Arroz", qty: 1 }],
-      `${corpus2} ${assist2}`,
-      "un choclo",
-      assist2,
+      corpus2,
+      "un choclo Listo un choclo agregado",
     );
     expect(qtyOf(draft2, "arroz")).toBe(2);
     expect(qtyOf(draft2, "choclo")).toBe(1);

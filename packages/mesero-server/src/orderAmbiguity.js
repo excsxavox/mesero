@@ -108,82 +108,17 @@ function countCocaPersonalMentions(hay) {
   return total;
 }
 
-/** Variantes del nombre en texto hablado (arroz → arroces; caldo → caldos en platos compuestos). */
-function addSpokenVariants(out, token) {
-  if (!token || token.length < 3) return;
-  out.add(token);
-  out.add(`${token}s`);
-  out.add(`${token}es`);
-  if (token.endsWith("z")) out.add(`${token.slice(0, -1)}ces`);
-}
-
+/** Variantes del nombre en texto hablado (arroz → arroces). */
 function nameVariantsForHay(itemName) {
   const nm = fold(itemName).trim();
   if (!nm) return [];
   const out = new Set([nm]);
   if (!nm.includes(" ")) {
-    addSpokenVariants(out, nm);
-  } else {
-    const head = significantTokens(itemName)[0];
-    if (head && head.length >= 4) addSpokenVariants(out, head);
+    out.add(`${nm}s`);
+    out.add(`${nm}es`);
+    if (nm.endsWith("z")) out.add(`${nm.slice(0, -1)}ces`);
   }
   return [...out];
-}
-
-function corpusWithoutTail(fullHay, tailHay) {
-  if (!tailHay || !fullHay) return fullHay ?? "";
-  const f = expandedHay(fullHay);
-  const t = expandedHay(tailHay);
-  if (!t || !f.includes(t)) return f;
-  return f.slice(0, f.lastIndexOf(t)).trim();
-}
-
-/**
- * Cantidad coherente: último turno del cliente + confirmación del mesero (evita sumar «dos» + «cinco» → 7).
- */
-export function resolveItemQty({ userHay, lastUserHay, assistantHay, itemName, menuItem, menu, prevQty = 1 }) {
-  const prev = Math.max(1, Math.min(99, Math.floor(Number(prevQty)) || 1));
-  const full = expandedHay(userHay ?? "");
-  const last = expandedHay(lastUserHay ?? "");
-  const assistRaw = String(assistantHay ?? "");
-  const assist = expandedHay(stripAssistantTags(assistRaw));
-
-  let fromUser = full ? qtyForMenuItemInHay(full, itemName, menuItem) : 1;
-
-  if (last && menuItem && Array.isArray(menu)) {
-    if (lineMatchesUserText(menuItem, last, menu)) {
-      const prevPart = corpusWithoutTail(full, last);
-      const prevSum = prevPart ? qtyForMenuItemInHay(prevPart, itemName, menuItem) : 0;
-      const lastQty = qtyForMenuItemInHay(last, itemName, menuItem);
-      if (hasRepeatOrderPhrase(last, itemName)) {
-        fromUser = prevSum + Math.max(1, lastQty);
-      } else if (lastQty > prevSum) {
-        fromUser = lastQty;
-      } else {
-        fromUser = Math.max(prevSum, lastQty);
-      }
-    }
-  }
-
-  let qty = Math.max(prev, fromUser);
-
-  if (assist && assistantConfirmsOrderItems(assistRaw)) {
-    if (menuItem && lineMatchesUserText(menuItem, assist, menu ?? [])) {
-      const fromAssist = qtyForMenuItemInHay(assist, itemName, menuItem);
-      if (fromAssist > 0) {
-        if (!hasRepeatOrderPhrase(last, itemName) && fromUser > fromAssist) {
-          qty = Math.max(prev, fromAssist);
-        } else {
-          qty = Math.max(prev, fromUser, fromAssist);
-        }
-      }
-    }
-  }
-  if (hasRepeatOrderPhrase(assist, itemName) && !hasRepeatOrderPhrase(last, itemName) && fromUser <= prev) {
-    qty = Math.max(qty, prev + 1);
-  }
-
-  return Math.min(99, qty);
 }
 
 /** Cantidad total mencionada en el corpus (suma «una coca» + «otra coca» → 2). */
@@ -218,25 +153,23 @@ export function qtyForMenuItemInHay(text, itemName, menuItem) {
 }
 
 /** Ajusta cantidades del borrador según lo que dijo el cliente o confirmó el mesero en voz. */
-export function applyQtyToDraftLines(lines, menu, userHay, assistantHay, lastUserHay = "") {
-  const userFull = expandedHay(userHay ?? "");
-  const lastHay = expandedHay(assistantHay ?? "");
-  if (!userFull && !lastHay) return lines ?? [];
+export function applyQtyToDraftLines(lines, menu, ...textParts) {
+  const parts = textParts.filter(Boolean);
+  const lastHay = expandedHay(parts[parts.length - 1] ?? "");
+  const userHay =
+    parts.length > 1 ? expandedHay(parts.slice(0, -1).join(" ")) : expandedHay(parts[0] ?? "");
+  if (!userHay && !lastHay) return lines ?? [];
   if (!Array.isArray(lines)) return lines ?? [];
   return lines.map((line) => {
     const mi = menu.find((m) => m.id === line.menuItemId);
     if (!mi) return line;
     const prev = Math.max(1, Math.min(99, Math.floor(Number(line.qty)) || 1));
-    const qty = resolveItemQty({
-      userHay: userHay ?? "",
-      lastUserHay: lastUserHay ?? "",
-      assistantHay: assistantHay ?? "",
-      itemName: mi.name,
-      menuItem: mi,
-      menu,
-      prevQty: prev,
-    });
-    return { ...line, qty };
+    const fromUser = userHay ? qtyForMenuItemInHay(userHay, mi.name, mi) : 1;
+    let qty = Math.max(prev, fromUser);
+    if (hasRepeatOrderPhrase(lastHay, mi.name) && fromUser <= prev) {
+      qty = Math.max(qty, prev + 1);
+    }
+    return { ...line, qty: Math.min(99, qty) };
   });
 }
 
@@ -303,8 +236,6 @@ function matchesByPrimaryToken(mi, hay, menu) {
 function lineMatchesUserText(mi, hay, menu) {
   if (!hay || !mi) return false;
   if (fullNameInHay(mi.name, hay)) return true;
-  const catFold = fold(mi.category ?? "");
-  if (/\b(jugos?|zumos?)\b/.test(hay) && /\b(jugos?|zumos?)\b/.test(catFold)) return true;
   if (isCocaColaProduct(mi.name)) {
     if (sizeHintsInHay(mi.name, hay)) return true;
     if (/\bpersonal\b/.test(hay) && /\b500\s*ml\b/.test(fold(mi.name))) return true;
@@ -564,12 +495,6 @@ function sizeHintsInHay(name, hay) {
 }
 
 /** Pedidos genéricos («una cola», «un jugo») que abarcan varias variantes del menú. */
-function itemMatchesGenericHint(hint, m) {
-  const blob = fold(`${m.name} ${m.category ?? ""}`);
-  if (hint.matchBlob) return hint.matchBlob(blob);
-  return hint.matchItem(m.name, m.category);
-}
-
 const GENERIC_PRODUCT_HINTS = [
   {
     label: "Gaseosa",
@@ -584,12 +509,12 @@ const GENERIC_PRODUCT_HINTS = [
   {
     label: "Jugo",
     re: /\b(jugo|zumo|juguito)\b/i,
-    matchItem: (name, category = "") => /\b(jugos?|zumos?)\b/i.test(fold(`${name} ${category}`)),
+    matchItem: (name) => /\b(jugo|zumo)\b/i.test(fold(name)),
   },
   {
     label: "Agua",
     re: /\b(agua)\b/i,
-    matchItem: (name, category = "") => /\b(agua)\b/i.test(fold(`${name} ${category}`)),
+    matchItem: (name) => /\b(agua)\b/i.test(fold(name)),
   },
 ];
 
@@ -598,7 +523,7 @@ function findGenericAmbiguousGroups(hay, menu) {
   const out = [];
   for (const hint of GENERIC_PRODUCT_HINTS) {
     if (!hint.re.test(hay)) continue;
-    const options = menu.filter((m) => m.available !== false && itemMatchesGenericHint(hint, m));
+    const options = menu.filter((m) => m.available !== false && hint.matchItem(m.name));
     if (options.length <= 1) continue;
     if (hint.label === "Gaseosa" && uniqueBrandSodaPick(options, hay)) continue;
     const fullHits = options.filter((m) => fullNameInHay(m.name, hay));

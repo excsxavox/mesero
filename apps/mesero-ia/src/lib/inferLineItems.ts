@@ -108,23 +108,14 @@ function tokenInHay(hay: string, token: string): boolean {
   return false;
 }
 
-function addSpokenVariants(out: Set<string>, token: string) {
-  if (!token || token.length < 3) return;
-  out.add(token);
-  out.add(`${token}s`);
-  out.add(`${token}es`);
-  if (token.endsWith("z")) out.add(`${token.slice(0, -1)}ces`);
-}
-
 function nameVariantsForHay(itemName: string): string[] {
   const nm = fold(itemName).trim();
   if (!nm) return [];
   const out = new Set([nm]);
   if (!nm.includes(" ")) {
-    addSpokenVariants(out, nm);
-  } else {
-    const head = significantTokens(itemName)[0];
-    if (head && head.length >= 4) addSpokenVariants(out, head);
+    out.add(`${nm}s`);
+    out.add(`${nm}es`);
+    if (nm.endsWith("z")) out.add(`${nm.slice(0, -1)}ces`);
   }
   return [...out];
 }
@@ -356,12 +347,6 @@ function pruneSupersededItems(
     });
     return !superseded;
   });
-}
-
-export function isMenuItemInCorpus(corpus: string, m: MenuItem, menu: MenuItem[]): boolean {
-  const hay = expandedHay(corpus);
-  if (!hay.trim()) return false;
-  return scoreMenuItem(m, hay, menu).score >= 100;
 }
 
 /**
